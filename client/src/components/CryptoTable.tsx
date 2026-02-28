@@ -211,10 +211,9 @@ export default function CryptoTable({ coins, loading }: CryptoTableProps) {
                         whiteSpace: "nowrap",
                       }}
                     >
-                      ${coin.current_price.toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      ${coin.current_price < 1
+                          ? coin.current_price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 4 })
+                          : coin.current_price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td style={{ padding: "12px 16px", textAlign: "right" }}>
                       <ChangeCell value={coin.price_change_percentage_24h} />

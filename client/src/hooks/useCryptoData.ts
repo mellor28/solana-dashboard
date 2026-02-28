@@ -106,7 +106,7 @@ export function useCryptoData() {
       // Parallel fetch: top coins list + Solana 30d history + Solana TVL
       const [coinsRes, historyRes, tvlRes, detailRes] = await Promise.allSettled([
         fetchWithRetry(
-          `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=solana,bitcoin,ethereum,binancecoin,ripple,cardano,avalanche-2,polkadot&order=market_cap_desc&per_page=8&page=1&sparkline=false&price_change_percentage=7d`
+          `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=solana,bitcoin,ethereum,avalanche-2,jupiter-exchange-solana,sui,stepn&order=market_cap_desc&per_page=8&page=1&sparkline=false&price_change_percentage=7d`
         ),
         fetchWithRetry(
           `${COINGECKO_BASE}/coins/solana/market_chart?vs_currency=usd&days=30&interval=daily`
