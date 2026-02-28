@@ -17,6 +17,9 @@ import PriceChart from "@/components/PriceChart";
 import CryptoTable from "@/components/CryptoTable";
 import AdoptionMetrics from "@/components/AdoptionMetrics";
 import StakingTracker from "@/components/StakingTracker";
+import FearGreedWidget from "@/components/FearGreedWidget";
+import StakeSinceTracker from "@/components/StakeSinceTracker";
+import { useMarinadeApy } from "@/hooks/useMarinadeApy";
 import { AlertCircle } from "lucide-react";
 
 export default function Home() {
@@ -34,6 +37,8 @@ export default function Home() {
 
   const priceChange7d = solanaDetail?.market_data?.price_change_percentage_7d;
   const priceChange30d = solanaDetail?.market_data?.price_change_percentage_30d;
+  const { apy30d } = useMarinadeApy();
+  const activeApy = apy30d?.apy ?? 6.10;
 
   return (
     <div
@@ -109,7 +114,7 @@ export default function Home() {
             priceChange30d={priceChange30d}
           />
 
-          {/* Price Chart + Market Table */}
+          {/* Price Chart + Quick Stats + Fear & Greed */}
           <div
             style={{
               display: "grid",
@@ -120,6 +125,7 @@ export default function Home() {
             className="flex-col-on-mobile"
           >
             <PriceChart data={solanaHistory} loading={loading} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div
               className="glass-card"
               style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 16 }}
@@ -227,6 +233,10 @@ export default function Home() {
                 </div>
               ))}
             </div>
+
+              {/* Fear & Greed Widget */}
+              <FearGreedWidget />
+            </div>
           </div>
 
           {/* Crypto market table */}
@@ -240,6 +250,9 @@ export default function Home() {
             solanaDetail={solanaDetail}
             loading={loading}
           />
+
+          {/* Stake Since Date Tracker */}
+          <StakeSinceTracker apy={activeApy} solPrice={solana?.current_price ?? 0} />
 
           {/* Staking Tracker */}
           <StakingTracker solPrice={solana?.current_price ?? 0} />
