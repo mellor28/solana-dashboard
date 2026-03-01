@@ -78,7 +78,7 @@ export default function PriceChart({ data, loading }: PriceChartProps) {
   return (
     <div
       className="glass-card"
-      style={{ padding: "24px 20px 16px 20px" }}
+      style={{ padding: "24px 20px 16px 20px", display: "flex", flexDirection: "column", height: "100%" }}
     >
       <div className="flex items-center justify-between mb-4">
         <div>
@@ -118,10 +118,12 @@ export default function PriceChart({ data, loading }: PriceChartProps) {
         </div>
       </div>
 
+      <div style={{ flex: 1, minHeight: 220 }}>
       {loading && data.length === 0 ? (
         <div
           style={{
-            height: 220,
+            height: "100%",
+            minHeight: 220,
             background: "rgba(255,255,255,0.04)",
             borderRadius: 8,
             display: "flex",
@@ -135,7 +137,7 @@ export default function PriceChart({ data, loading }: PriceChartProps) {
           Loading chart data...
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={220}>
+        <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id="solGradient" x1="0" y1="0" x2="0" y2="1">
@@ -189,6 +191,7 @@ export default function PriceChart({ data, loading }: PriceChartProps) {
           </AreaChart>
         </ResponsiveContainer>
       )}
+      </div>
     </div>
   );
 }

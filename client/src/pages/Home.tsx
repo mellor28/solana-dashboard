@@ -123,6 +123,7 @@ export default function Home() {
               gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1fr)",
               gap: 16,
               marginBottom: 28,
+              alignItems: "stretch",
             }}
             className="flex-col-on-mobile"
           >
