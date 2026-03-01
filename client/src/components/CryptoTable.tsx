@@ -55,7 +55,7 @@ function ChangeCell({ value }: { value: number }) {
 
 export default function CryptoTable({ coins, loading }: CryptoTableProps) {
   return (
-    <div className="glass-card" style={{ overflow: "hidden" }}>
+    <div id="market-overview" className="glass-card" style={{ overflow: "hidden" }}>
       <div style={{ padding: "20px 20px 12px 20px" }}>
         <h3
           style={{

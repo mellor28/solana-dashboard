@@ -10,6 +10,7 @@
  */
 
 import { useCryptoData } from "@/hooks/useCryptoData";
+import { useStakeAmount } from "@/hooks/useStakeAmount";
 import ParticleBackground from "@/components/ParticleBackground";
 import Navbar from "@/components/Navbar";
 import SolanaHero from "@/components/SolanaHero";
@@ -39,6 +40,7 @@ export default function Home() {
   const priceChange30d = solanaDetail?.market_data?.price_change_percentage_30d;
   const { apy30d } = useMarinadeApy();
   const activeApy = apy30d?.apy ?? 6.10;
+  const { stakeAmount, setStakeAmount } = useStakeAmount();
 
   return (
     <div
@@ -252,10 +254,10 @@ export default function Home() {
           />
 
           {/* Stake Since Date Tracker */}
-          <StakeSinceTracker apy={activeApy} solPrice={solana?.current_price ?? 0} />
+          <StakeSinceTracker apy={activeApy} solPrice={solana?.current_price ?? 0} stakeAmount={stakeAmount} onStakeAmountChange={setStakeAmount} />
 
           {/* Staking Tracker */}
-          <StakingTracker solPrice={solana?.current_price ?? 0} />
+          <StakingTracker solPrice={solana?.current_price ?? 0} stakeAmount={stakeAmount} onStakeAmountChange={setStakeAmount} />
 
           {/* Footer */}
           <div

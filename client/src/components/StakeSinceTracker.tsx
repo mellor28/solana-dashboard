@@ -25,7 +25,6 @@ import {
 } from "recharts";
 import { CalendarDays, TrendingUp, Coins, Clock } from "lucide-react";
 
-const INITIAL_STAKE = 100.22;
 const STORAGE_KEY = "sol_stake_start_date";
 
 function loadSavedDate(): string {
@@ -48,7 +47,7 @@ interface DailyPoint {
   total: number;
 }
 
-function buildDailyHistory(startDate: Date, apy: number): DailyPoint[] {
+function buildDailyHistory(startDate: Date, apy: number, principal: number): DailyPoint[] {
   const dailyRate = apy / 100 / 365;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -65,8 +64,8 @@ function buildDailyHistory(startDate: Date, apy: number): DailyPoint[] {
   const step = Math.max(1, Math.floor(totalDays / 90));
 
   for (let d = 0; d <= totalDays; d += step) {
-    const compounded = INITIAL_STAKE * Math.pow(1 + dailyRate, d);
-    const rewards = compounded - INITIAL_STAKE;
+    const compounded = principal * Math.pow(1 + dailyRate, d);
+    const rewards = compounded - principal;
     const date = new Date(start);
     date.setDate(date.getDate() + d);
     points.push({
@@ -77,8 +76,8 @@ function buildDailyHistory(startDate: Date, apy: number): DailyPoint[] {
   }
 
   // Always include today as last point
-  const lastCompounded = INITIAL_STAKE * Math.pow(1 + dailyRate, totalDays);
-  const lastRewards = lastCompounded - INITIAL_STAKE;
+  const lastCompounded = principal * Math.pow(1 + dailyRate, totalDays);
+  const lastRewards = lastCompounded - principal;
   const lastDate = new Date(today);
   const lastPoint = {
     date: lastDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
@@ -136,9 +135,11 @@ const CustomTooltip = ({ active, payload, label, solPrice }: any) => {
 interface StakeSinceTrackerProps {
   apy: number;
   solPrice: number;
+  stakeAmount: number;
+  onStakeAmountChange: (amount: number) => void;
 }
 
-export default function StakeSinceTracker({ apy, solPrice }: StakeSinceTrackerProps) {
+export default function StakeSinceTracker({ apy, solPrice, stakeAmount, onStakeAmountChange }: StakeSinceTrackerProps) {
   const [dateInput, setDateInput] = useState<string>(() => loadSavedDate());
   const [editing, setEditing] = useState(!loadSavedDate());
 
@@ -159,16 +160,16 @@ export default function StakeSinceTracker({ apy, solPrice }: StakeSinceTrackerPr
 
   // Core calculations
   const { daysStaked, rewardsEarned, totalNow, dailyReward, effectiveApy } = useMemo(() => {
-    if (!startDate) return { daysStaked: 0, rewardsEarned: 0, totalNow: INITIAL_STAKE, dailyReward: 0, effectiveApy: 0 };
+    if (!startDate) return { daysStaked: 0, rewardsEarned: 0, totalNow: stakeAmount, dailyReward: 0, effectiveApy: 0 };
     const today = new Date();
     const diffMs = today.getTime() - startDate.getTime();
     const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
     const dailyRate = apy / 100 / 365;
-    const total = INITIAL_STAKE * Math.pow(1 + dailyRate, days);
-    const rewards = total - INITIAL_STAKE;
-    const daily = INITIAL_STAKE * dailyRate;
+    const total = stakeAmount * Math.pow(1 + dailyRate, days);
+    const rewards = total - stakeAmount;
+    const daily = stakeAmount * dailyRate;
     // Effective APY from actual growth
-    const effectiveA = days > 0 ? ((rewards / INITIAL_STAKE) / days) * 365 * 100 : apy;
+    const effectiveA = days > 0 ? ((rewards / stakeAmount) / days) * 365 * 100 : apy;
     return {
       daysStaked: days,
       rewardsEarned: rewards,
@@ -176,12 +177,12 @@ export default function StakeSinceTracker({ apy, solPrice }: StakeSinceTrackerPr
       dailyReward: daily,
       effectiveApy: effectiveA,
     };
-  }, [startDate, apy]);
+  }, [startDate, apy, stakeAmount]);
 
   const history = useMemo(() => {
     if (!startDate || daysStaked <= 0) return [];
-    return buildDailyHistory(startDate, apy);
-  }, [startDate, apy, daysStaked]);
+    return buildDailyHistory(startDate, apy, stakeAmount);
+  }, [startDate, apy, daysStaked, stakeAmount]);
 
   const weeksStaked = Math.floor(daysStaked / 7);
   const monthsStaked = Math.floor(daysStaked / 30.44);

@@ -35,12 +35,13 @@ import {
 import { useCountUp } from "@/hooks/useCountUp";
 import { useMarinadeApy } from "@/hooks/useMarinadeApy";
 
-const INITIAL_STAKE = 100.22;
 const FALLBACK_APY = 6.10;
 const MARINADE_URL = "https://marinade.finance";
 
 interface StakingTrackerProps {
   solPrice: number;
+  stakeAmount: number;
+  onStakeAmountChange: (amount: number) => void;
 }
 
 function generateProjections(
@@ -115,7 +116,19 @@ function ProjectionTooltip({ active, payload, label, solPrice }: any) {
   return null;
 }
 
-export default function StakingTracker({ solPrice }: StakingTrackerProps) {
+export default function StakingTracker({ solPrice, stakeAmount, onStakeAmountChange }: StakingTrackerProps) {
+  const [stakeInput, setStakeInput] = useState(stakeAmount.toFixed(4));
+  const [isEditingStake, setIsEditingStake] = useState(false);
+
+  const handleStakeConfirm = () => {
+    const parsed = parseFloat(stakeInput);
+    if (!isNaN(parsed) && parsed > 0) {
+      onStakeAmountChange(parsed);
+    } else {
+      setStakeInput(stakeAmount.toFixed(4));
+    }
+    setIsEditingStake(false);
+  };
   const { apy7d, apy30d, apy1y, loading: apyLoading, error: apyError, lastFetched, refetch } = useMarinadeApy();
 
   // Primary APY for projections: 30d rolling from Marinade API, fallback to manual
@@ -152,21 +165,21 @@ export default function StakingTracker({ solPrice }: StakingTrackerProps) {
   };
 
   const projections = useMemo(
-    () => generateProjections(INITIAL_STAKE, activeApy, viewMonths),
-    [activeApy, viewMonths]
+    () => generateProjections(stakeAmount, activeApy, viewMonths),
+    [stakeAmount, activeApy, viewMonths]
   );
-  const proj12 = useMemo(() => generateProjections(INITIAL_STAKE, activeApy, 12), [activeApy]);
-  const proj24 = useMemo(() => generateProjections(INITIAL_STAKE, activeApy, 24), [activeApy]);
+  const proj12 = useMemo(() => generateProjections(stakeAmount, activeApy, 12), [stakeAmount, activeApy]);
+  const proj24 = useMemo(() => generateProjections(stakeAmount, activeApy, 24), [stakeAmount, activeApy]);
 
   const after1Month = proj12[1];
   const after6Months = proj12[6];
   const after12Months = proj12[12];
   const after24Months = proj24[24];
 
-  const monthlyReward = (INITIAL_STAKE * activeApy) / 100 / 12;
+  const monthlyReward = (stakeAmount * activeApy) / 100 / 12;
   const annualReward = after12Months.rewards;
 
-  const animatedStake = useCountUp(INITIAL_STAKE, 1200, 4);
+  const animatedStake = useCountUp(stakeAmount, 1200, 4);
 
   const formatLastFetched = (d: Date | null) => {
     if (!d) return null;
@@ -375,18 +388,38 @@ export default function StakingTracker({ solPrice }: StakingTrackerProps) {
               pointerEvents: "none",
             }}
           />
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-            Current Stake
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span>Current Stake</span>
+            <button
+              onClick={() => { setIsEditingStake(true); setStakeInput(stakeAmount.toFixed(4)); }}
+              style={{ fontSize: 10, color: "rgba(20,241,149,0.6)", background: "rgba(20,241,149,0.08)", border: "1px solid rgba(20,241,149,0.2)", borderRadius: 4, padding: "2px 6px", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+            >Update</button>
           </div>
-          <div style={{ fontSize: 28, fontFamily: "'Space Mono', monospace", fontWeight: 700, color: "#14F195", lineHeight: 1.1, marginBottom: 4 }}>
-            {animatedStake.toFixed(4)}
-          </div>
+          {isEditingStake ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+              <input
+                type="number"
+                value={stakeInput}
+                onChange={(e) => setStakeInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleStakeConfirm(); if (e.key === "Escape") { setIsEditingStake(false); setStakeInput(stakeAmount.toFixed(4)); } }}
+                autoFocus
+                step="0.0001"
+                min="0.0001"
+                style={{ width: 110, background: "rgba(20,241,149,0.1)", border: "1px solid rgba(20,241,149,0.4)", borderRadius: 8, padding: "4px 8px", fontSize: 20, fontFamily: "'Space Mono', monospace", fontWeight: 700, color: "#14F195", outline: "none" }}
+              />
+              <button onClick={handleStakeConfirm} style={{ fontSize: 11, color: "#14F195", background: "rgba(20,241,149,0.15)", border: "1px solid rgba(20,241,149,0.3)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>Save</button>
+            </div>
+          ) : (
+            <div style={{ fontSize: 28, fontFamily: "'Space Mono', monospace", fontWeight: 700, color: "#14F195", lineHeight: 1.1, marginBottom: 4 }}>
+              {animatedStake.toFixed(4)}
+            </div>
+          )}
           <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", fontFamily: "'DM Sans', sans-serif" }}>
             SOL staked
           </div>
           {solPrice > 0 && (
             <div style={{ marginTop: 6, fontSize: 13, color: "rgba(255,255,255,0.35)", fontFamily: "'Space Mono', monospace" }}>
-              ≈ ${(INITIAL_STAKE * solPrice).toLocaleString("en-US", { maximumFractionDigits: 0 })} USD
+              ≈ ${(stakeAmount * solPrice).toLocaleString("en-US", { maximumFractionDigits: 0 })} USD
             </div>
           )}
         </div>
@@ -589,7 +622,7 @@ export default function StakingTracker({ solPrice }: StakingTrackerProps) {
             Staking Milestones
           </h3>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "'Space Mono', monospace" }}>
-            APY: {activeApy.toFixed(2)}% · Principal: {INITIAL_STAKE} SOL
+            APY: {activeApy.toFixed(2)}% · Principal: {stakeAmount.toFixed(4)} SOL
           </div>
         </div>
 
@@ -624,7 +657,7 @@ export default function StakingTracker({ solPrice }: StakingTrackerProps) {
                 { label: "12 Months (1 Year)", data: after12Months },
                 { label: "24 Months (2 Years)", data: after24Months },
               ].map(({ label, data }) => {
-                const growth = ((data.sol - INITIAL_STAKE) / INITIAL_STAKE) * 100;
+                const growth = ((data.sol - stakeAmount) / stakeAmount) * 100;
                 const isYearly = label.includes("Year");
                 return (
                   <tr

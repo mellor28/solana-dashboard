@@ -89,10 +89,10 @@ export default function Navbar({ lastUpdated, onRefresh, loading }: NavbarProps)
 
           {/* Nav links */}
           <div className="hidden md:flex items-center gap-6">
-            {["Overview", "Adoption", "Staking"].map((item) => (
+            {["Overview", "Market", "Adoption", "Staking"].map((item) => (
               <a
                 key={item}
-                href={`#${item.toLowerCase()}`}
+                href={item === "Market" ? "#market-overview" : `#${item.toLowerCase()}`}
                 style={{
                   color: "rgba(255,255,255,0.6)",
                   fontSize: 14,
