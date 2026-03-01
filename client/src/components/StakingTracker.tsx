@@ -41,6 +41,8 @@ const MARINADE_URL = "https://marinade.finance";
 interface StakingTrackerProps {
   solPrice: number;
   stakeAmount: number;
+  originalStake: number;
+  rewardsAccumulated: number;
   onStakeAmountChange: (amount: number) => void;
 }
 
@@ -116,7 +118,7 @@ function ProjectionTooltip({ active, payload, label, solPrice }: any) {
   return null;
 }
 
-export default function StakingTracker({ solPrice, stakeAmount, onStakeAmountChange }: StakingTrackerProps) {
+export default function StakingTracker({ solPrice, stakeAmount, originalStake, rewardsAccumulated, onStakeAmountChange }: StakingTrackerProps) {
   const [stakeInput, setStakeInput] = useState(stakeAmount.toFixed(4));
   const [isEditingStake, setIsEditingStake] = useState(false);
 
@@ -420,6 +422,22 @@ export default function StakingTracker({ solPrice, stakeAmount, onStakeAmountCha
           {solPrice > 0 && (
             <div style={{ marginTop: 6, fontSize: 13, color: "rgba(255,255,255,0.35)", fontFamily: "'Space Mono', monospace" }}>
               ≈ ${(stakeAmount * solPrice).toLocaleString("en-US", { maximumFractionDigits: 0 })} USD
+            </div>
+          )}
+          {rewardsAccumulated > 0 && (
+            <div style={{ marginTop: 8, padding: "6px 10px", borderRadius: 6, background: "rgba(20,241,149,0.07)", border: "1px solid rgba(20,241,149,0.15)" }}>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "'DM Sans', sans-serif", marginBottom: 2 }}>Rewards accumulated</div>
+              <div style={{ fontSize: 14, fontFamily: "'Space Mono', monospace", fontWeight: 700, color: "#14F195" }}>
+                +{rewardsAccumulated.toFixed(4)} SOL
+              </div>
+              {solPrice > 0 && (
+                <div style={{ fontSize: 11, color: "rgba(20,241,149,0.5)", fontFamily: "'Space Mono', monospace" }}>
+                  ≈ +${(rewardsAccumulated * solPrice).toLocaleString("en-US", { maximumFractionDigits: 2 })} USD
+                </div>
+              )}
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontFamily: "'DM Sans', sans-serif", marginTop: 2 }}>
+                vs original {originalStake.toFixed(4)} SOL
+              </div>
             </div>
           )}
         </div>

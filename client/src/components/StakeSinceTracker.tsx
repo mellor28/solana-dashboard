@@ -136,10 +136,13 @@ interface StakeSinceTrackerProps {
   apy: number;
   solPrice: number;
   stakeAmount: number;
+  originalStake: number;
+  rewardsAccumulated: number;
   onStakeAmountChange: (amount: number) => void;
+  onResetOriginal: (amount: number) => void;
 }
 
-export default function StakeSinceTracker({ apy, solPrice, stakeAmount, onStakeAmountChange }: StakeSinceTrackerProps) {
+export default function StakeSinceTracker({ apy, solPrice, stakeAmount, originalStake, rewardsAccumulated, onStakeAmountChange, onResetOriginal }: StakeSinceTrackerProps) {
   const [dateInput, setDateInput] = useState<string>(() => loadSavedDate());
   const [editing, setEditing] = useState(!loadSavedDate());
 
@@ -345,7 +348,7 @@ export default function StakeSinceTracker({ apy, solPrice, stakeAmount, onStakeA
               </div>
             </div>
 
-            {/* Rewards earned */}
+            {/* Rewards earned — use real accumulated if available, else estimated */}
             <div
               style={{
                 background: "rgba(153,69,255,0.07)",
@@ -361,14 +364,17 @@ export default function StakeSinceTracker({ apy, solPrice, stakeAmount, onStakeA
                 </span>
               </div>
               <div style={{ fontSize: 22, fontFamily: "'Space Mono', monospace", fontWeight: 700, color: "#9945FF", lineHeight: 1.1 }}>
-                +{rewardsEarned.toFixed(4)}
+                +{rewardsAccumulated > 0 ? rewardsAccumulated.toFixed(4) : rewardsEarned.toFixed(4)}
               </div>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'DM Sans', sans-serif", marginTop: 2 }}>
-                SOL{solPrice > 0 ? ` · ≈ $${(rewardsEarned * solPrice).toFixed(2)}` : ""}
+                SOL{solPrice > 0 ? ` · ≈ $${((rewardsAccumulated > 0 ? rewardsAccumulated : rewardsEarned) * solPrice).toFixed(2)}` : ""}
+              </div>
+              <div style={{ fontSize: 10, color: "rgba(153,69,255,0.45)", fontFamily: "'DM Sans', sans-serif", marginTop: 3 }}>
+                {rewardsAccumulated > 0 ? `vs original ${originalStake.toFixed(4)} SOL` : "est. from APY"}
               </div>
             </div>
 
-            {/* Current total */}
+            {/* Current total — use real currentStake if available */}
             <div
               style={{
                 background: "rgba(255,255,255,0.04)",
@@ -380,14 +386,17 @@ export default function StakeSinceTracker({ apy, solPrice, stakeAmount, onStakeA
               <div className="flex items-center gap-1.5 mb-1">
                 <TrendingUp size={11} color="rgba(255,255,255,0.4)" />
                 <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Est. Total Now
+                  Current Total
                 </span>
               </div>
               <div style={{ fontSize: 22, fontFamily: "'Space Mono', monospace", fontWeight: 700, color: "rgba(255,255,255,0.85)", lineHeight: 1.1 }}>
-                {totalNow.toFixed(4)}
+                {stakeAmount.toFixed(4)}
               </div>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'DM Sans', sans-serif", marginTop: 2 }}>
-                SOL{solPrice > 0 ? ` · ≈ $${(totalNow * solPrice).toLocaleString("en-US", { maximumFractionDigits: 0 })}` : ""}
+                SOL{solPrice > 0 ? ` · ≈ $${(stakeAmount * solPrice).toLocaleString("en-US", { maximumFractionDigits: 0 })}` : ""}
+              </div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontFamily: "'DM Sans', sans-serif", marginTop: 3 }}>
+                {rewardsAccumulated > 0 ? "manually synced" : "est. from APY"}
               </div>
             </div>
 
