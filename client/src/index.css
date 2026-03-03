@@ -291,5 +291,26 @@
     .flex-col-on-mobile {
       grid-template-columns: 1fr !important;
     }
+    .network-grid {
+      grid-template-columns: 1fr 1fr !important;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .network-grid {
+      grid-template-columns: 1fr !important;
+    }
+  }
+
+  /* Spin animation for refresh icons */
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* Pulse skeleton animation */
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
   }
 }

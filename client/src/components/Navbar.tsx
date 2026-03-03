@@ -14,6 +14,15 @@ interface NavbarProps {
   loading: boolean;
 }
 
+const NAV_ITEMS = [
+  { label: "Portfolio", href: "#portfolio" },
+  { label: "Market", href: "#market-overview" },
+  { label: "Network", href: "#network" },
+  { label: "Adoption", href: "#adoption" },
+  { label: "News", href: "#news" },
+  { label: "Staking", href: "#staking" },
+];
+
 export default function Navbar({ lastUpdated, onRefresh, loading }: NavbarProps) {
   const [spinning, setSpinning] = useState(false);
 
@@ -88,14 +97,14 @@ export default function Navbar({ lastUpdated, onRefresh, loading }: NavbarProps)
           </div>
 
           {/* Nav links */}
-          <div className="hidden md:flex items-center gap-6">
-            {["Overview", "Market", "Adoption", "Staking"].map((item) => (
+          <div className="hidden md:flex items-center gap-5">
+            {NAV_ITEMS.map((item) => (
               <a
-                key={item}
-                href={item === "Market" ? "#market-overview" : `#${item.toLowerCase()}`}
+                key={item.label}
+                href={item.href}
                 style={{
                   color: "rgba(255,255,255,0.6)",
-                  fontSize: 14,
+                  fontSize: 13,
                   fontFamily: "'DM Sans', sans-serif",
                   fontWeight: 500,
                   textDecoration: "none",
@@ -108,7 +117,7 @@ export default function Navbar({ lastUpdated, onRefresh, loading }: NavbarProps)
                   ((e.target as HTMLElement).style.color = "rgba(255,255,255,0.6)")
                 }
               >
-                {item}
+                {item.label}
               </a>
             ))}
           </div>

@@ -11,6 +11,7 @@
 
 import { useCryptoData } from "@/hooks/useCryptoData";
 import { useStakeAmount } from "@/hooks/useStakeAmount";
+import { useJupBalance } from "@/hooks/useJupBalance";
 import ParticleBackground from "@/components/ParticleBackground";
 import Navbar from "@/components/Navbar";
 import SolanaHero from "@/components/SolanaHero";
@@ -20,6 +21,9 @@ import AdoptionMetrics from "@/components/AdoptionMetrics";
 import StakingTracker from "@/components/StakingTracker";
 import FearGreedWidget from "@/components/FearGreedWidget";
 import JupiterWidget from "@/components/JupiterWidget";
+import PortfolioNetWorth from "@/components/PortfolioNetWorth";
+import NetworkHealth from "@/components/NetworkHealth";
+import NewsFeed from "@/components/NewsFeed";
 import { useMarinadeApy } from "@/hooks/useMarinadeApy";
 import { AlertCircle } from "lucide-react";
 
@@ -41,6 +45,11 @@ export default function Home() {
   const { apy30d } = useMarinadeApy();
   const activeApy = apy30d?.apy ?? 6.10;
   const { stakeAmount, currentStake, baseStake, originalStake, rewardsAccumulated, epochRewards, epochsElapsed, currentEpoch, lastSynced, setStakeAmount } = useStakeAmount(activeApy);
+
+  // JUP balance for portfolio card — reads same localStorage key as JupiterWidget
+  const { jupAmount, jupPrice } = useJupBalance();
+
+  const solPrice = solana?.current_price ?? 0;
 
   return (
     <div
@@ -114,6 +123,15 @@ export default function Home() {
             loading={loading}
             priceChange7d={priceChange7d}
             priceChange30d={priceChange30d}
+          />
+
+          {/* ── PORTFOLIO NET WORTH ── */}
+          <PortfolioNetWorth
+            solPrice={solPrice}
+            solStaked={currentStake}
+            jupPrice={jupPrice}
+            jupAmount={jupAmount}
+            loading={loading}
           />
 
           {/* Price Chart + Quick Stats + Fear & Greed */}
@@ -247,12 +265,18 @@ export default function Home() {
             <CryptoTable coins={topCoins} loading={loading} />
           </div>
 
+          {/* ── SOLANA NETWORK HEALTH ── */}
+          <NetworkHealth />
+
           {/* Adoption Metrics */}
           <AdoptionMetrics
             solanaTvl={solanaTvl}
             solanaDetail={solanaDetail}
             loading={loading}
           />
+
+          {/* ── CRYPTO NEWS FEED ── */}
+          <NewsFeed />
 
           {/* Jupiter Staking Widget */}
           <JupiterWidget />
@@ -285,7 +309,7 @@ export default function Home() {
                 fontFamily: "'Space Mono', monospace",
               }}
             >
-              Data from CoinGecko & DeFiLlama · Refreshes every 5 minutes · Not financial advice
+              Data from CoinGecko, DeFiLlama & Cointelegraph · Refreshes every 5 minutes · Not financial advice
             </div>
             <div
               style={{
