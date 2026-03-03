@@ -479,6 +479,15 @@ export default function StakingTracker({ solPrice, stakeAmount, baseStake, origi
           <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", fontFamily: "'DM Sans', sans-serif" }}>
             SOL staked
           </div>
+          {/* Last synced timestamp — always visible inside the card */}
+          <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 5 }}>
+            <Clock size={10} color={lastSynced ? "rgba(20,241,149,0.5)" : "rgba(255,255,255,0.2)"} />
+            <span style={{ fontSize: 10, color: lastSynced ? "rgba(20,241,149,0.55)" : "rgba(255,255,255,0.2)", fontFamily: "'Space Mono', monospace" }}>
+              {lastSynced
+                ? `Synced ${lastSynced.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${lastSynced.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`
+                : "Not yet synced"}
+            </span>
+          </div>
           {solPrice > 0 && (
             <div style={{ marginTop: 6, fontSize: 13, color: "rgba(255,255,255,0.35)", fontFamily: "'Space Mono', monospace" }}>
               ≈ ${(stakeAmount * solPrice).toLocaleString("en-US", { maximumFractionDigits: 0 })} USD
