@@ -19,7 +19,7 @@ import CryptoTable from "@/components/CryptoTable";
 import AdoptionMetrics from "@/components/AdoptionMetrics";
 import StakingTracker from "@/components/StakingTracker";
 import FearGreedWidget from "@/components/FearGreedWidget";
-import StakeSinceTracker from "@/components/StakeSinceTracker";
+import JupiterWidget from "@/components/JupiterWidget";
 import { useMarinadeApy } from "@/hooks/useMarinadeApy";
 import { AlertCircle } from "lucide-react";
 
@@ -40,7 +40,7 @@ export default function Home() {
   const priceChange30d = solanaDetail?.market_data?.price_change_percentage_30d;
   const { apy30d } = useMarinadeApy();
   const activeApy = apy30d?.apy ?? 6.10;
-  const { stakeAmount, currentStake, baseStake, originalStake, rewardsAccumulated, epochRewards, epochsElapsed, currentEpoch, lastSynced, setStakeAmount, resetOriginalStake } = useStakeAmount(activeApy);
+  const { stakeAmount, currentStake, baseStake, originalStake, rewardsAccumulated, epochRewards, epochsElapsed, currentEpoch, lastSynced, setStakeAmount } = useStakeAmount(activeApy);
 
   return (
     <div
@@ -254,16 +254,8 @@ export default function Home() {
             loading={loading}
           />
 
-          {/* Stake Since Date Tracker */}
-          <StakeSinceTracker
-            apy={activeApy}
-            solPrice={solana?.current_price ?? 0}
-            stakeAmount={stakeAmount}
-            originalStake={originalStake}
-            rewardsAccumulated={rewardsAccumulated}
-            onStakeAmountChange={setStakeAmount}
-            onResetOriginal={resetOriginalStake}
-          />
+          {/* Jupiter Staking Widget */}
+          <JupiterWidget />
 
           {/* Staking Tracker */}
           <StakingTracker
