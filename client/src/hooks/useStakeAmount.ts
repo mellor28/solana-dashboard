@@ -5,6 +5,9 @@
  *  - originalStake: the amount staked at the very beginning (set once, never changes)
  *  - currentStake:  the current total balance (updated manually from Marinade dashboard)
  *
+ * Also tracks:
+ *  - lastSynced: ISO timestamp of the last manual sync
+ *
  * This distinction allows the dashboard to correctly show:
  *  - Rewards earned to date = currentStake − originalStake
  *  - Future projections compounding from currentStake (the real baseline)
@@ -18,6 +21,7 @@ import { useState, useCallback } from "react";
 
 const CURRENT_KEY = "sol_stake_amount";
 const ORIGINAL_KEY = "sol_stake_original";
+const SYNCED_KEY = "sol_stake_last_synced";
 const DEFAULT_STAKE = 100.22;
 
 function loadValue(key: string, fallback: number): number {
@@ -52,11 +56,25 @@ export function useStakeAmount() {
     return current;
   });
 
+  const [lastSynced, setLastSyncedState] = useState<Date | null>(() => {
+    try {
+      const raw = localStorage.getItem(SYNCED_KEY);
+      if (!raw) return null;
+      const d = new Date(raw);
+      return isNaN(d.getTime()) ? null : d;
+    } catch {
+      return null;
+    }
+  });
+
   /** Update the current balance (called when user manually syncs with Marinade) */
   const setCurrentStake = useCallback((amount: number) => {
     if (isNaN(amount) || amount <= 0) return;
     saveValue(CURRENT_KEY, amount);
     setCurrentStakeState(amount);
+    const now = new Date();
+    try { localStorage.setItem(SYNCED_KEY, now.toISOString()); } catch {}
+    setLastSyncedState(now);
   }, []);
 
   /** Reset the original stake (called if user wants to start tracking from scratch) */
@@ -66,6 +84,9 @@ export function useStakeAmount() {
     setOriginalStakeState(amount);
     saveValue(CURRENT_KEY, amount);
     setCurrentStakeState(amount);
+    const now = new Date();
+    try { localStorage.setItem(SYNCED_KEY, now.toISOString()); } catch {}
+    setLastSyncedState(now);
   }, []);
 
   const rewardsAccumulated = Math.max(0, currentStake - originalStake);
@@ -75,6 +96,7 @@ export function useStakeAmount() {
     currentStake,
     originalStake,
     rewardsAccumulated,
+    lastSynced,
     setStakeAmount: setCurrentStake, // alias for backward compat
     setCurrentStake,
     resetOriginalStake,

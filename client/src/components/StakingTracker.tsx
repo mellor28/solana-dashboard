@@ -31,7 +31,10 @@ import {
   Wifi,
   WifiOff,
   CheckCircle2,
+  ArrowDownToLine,
+  Clock,
 } from "lucide-react";
+import EpochCountdown from "@/components/EpochCountdown";
 import { useCountUp } from "@/hooks/useCountUp";
 import { useMarinadeApy } from "@/hooks/useMarinadeApy";
 
@@ -43,6 +46,7 @@ interface StakingTrackerProps {
   stakeAmount: number;
   originalStake: number;
   rewardsAccumulated: number;
+  lastSynced: Date | null;
   onStakeAmountChange: (amount: number) => void;
 }
 
@@ -118,7 +122,7 @@ function ProjectionTooltip({ active, payload, label, solPrice }: any) {
   return null;
 }
 
-export default function StakingTracker({ solPrice, stakeAmount, originalStake, rewardsAccumulated, onStakeAmountChange }: StakingTrackerProps) {
+export default function StakingTracker({ solPrice, stakeAmount, originalStake, rewardsAccumulated, lastSynced, onStakeAmountChange }: StakingTrackerProps) {
   const [stakeInput, setStakeInput] = useState(stakeAmount.toFixed(4));
   const [isEditingStake, setIsEditingStake] = useState(false);
 
@@ -222,30 +226,83 @@ export default function StakingTracker({ solPrice, stakeAmount, originalStake, r
             MARINADE FINANCE · MAX YIELD STRATEGY
           </div>
         </div>
-        <a
-          href={MARINADE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            marginLeft: "auto",
-            background: "rgba(20,241,149,0.1)",
-            border: "1px solid rgba(20,241,149,0.25)",
-            borderRadius: 8,
-            padding: "6px 14px",
-            fontSize: 12,
-            color: "#14F195",
-            fontFamily: "'DM Sans', sans-serif",
-            fontWeight: 600,
-            textDecoration: "none",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          <ExternalLink size={12} />
-          Marinade Finance
-        </a>
+        {/* Right side: sync button + last synced + epoch pill */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {/* Epoch countdown pill */}
+          <EpochCountdown compact />
+
+          {/* Sync Balance button */}
+          <a
+            href="https://marinade.finance/app/staking/"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => {
+              // Show a toast-style reminder
+              setTimeout(() => {
+                const el = document.getElementById('sync-reminder');
+                if (el) { el.style.opacity = '1'; setTimeout(() => { el.style.opacity = '0'; }, 4000); }
+              }, 500);
+            }}
+            style={{
+              background: "linear-gradient(135deg, rgba(20,241,149,0.15), rgba(153,69,255,0.1))",
+              border: "1px solid rgba(20,241,149,0.35)",
+              borderRadius: 8,
+              padding: "7px 14px",
+              fontSize: 12,
+              color: "#14F195",
+              fontFamily: "'DM Sans', sans-serif",
+              fontWeight: 700,
+              textDecoration: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              boxShadow: "0 0 12px rgba(20,241,149,0.1)",
+            }}
+          >
+            <ArrowDownToLine size={13} />
+            Sync Balance
+          </a>
+        </div>
       </div>
+
+      {/* Last synced + sync reminder banner */}
+      <div
+        id="sync-reminder"
+        style={{
+          marginBottom: 10,
+          padding: "10px 16px",
+          borderRadius: 8,
+          background: "rgba(20,241,149,0.07)",
+          border: "1px solid rgba(20,241,149,0.18)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 8,
+          opacity: 0,
+          transition: "opacity 0.4s ease",
+          pointerEvents: "none",
+        }}
+      >
+        <span style={{ fontSize: 12, color: "#14F195", fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>
+          ✓ Marinade opened — copy your balance and click Update on the Current Stake card
+        </span>
+      </div>
+
+      {/* Last synced info */}
+      {lastSynced && (
+        <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+          <CheckCircle2 size={12} color="rgba(20,241,149,0.5)" />
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "'DM Sans', sans-serif" }}>
+            Balance last synced: <span style={{ color: "rgba(20,241,149,0.6)", fontFamily: "'Space Mono', monospace" }}>
+              {lastSynced.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} at {lastSynced.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </span>
+        </div>
+      )}
+
+      {/* Epoch countdown card */}
+      <EpochCountdown />
 
       {/* Live APY status banner */}
       <div

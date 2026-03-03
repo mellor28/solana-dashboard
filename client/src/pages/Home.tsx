@@ -40,7 +40,7 @@ export default function Home() {
   const priceChange30d = solanaDetail?.market_data?.price_change_percentage_30d;
   const { apy30d } = useMarinadeApy();
   const activeApy = apy30d?.apy ?? 6.10;
-  const { stakeAmount, originalStake, rewardsAccumulated, setStakeAmount, resetOriginalStake } = useStakeAmount();
+  const { stakeAmount, originalStake, rewardsAccumulated, lastSynced, setStakeAmount, resetOriginalStake } = useStakeAmount();
 
   return (
     <div
@@ -271,6 +271,7 @@ export default function Home() {
             stakeAmount={stakeAmount}
             originalStake={originalStake}
             rewardsAccumulated={rewardsAccumulated}
+            lastSynced={lastSynced}
             onStakeAmountChange={setStakeAmount}
           />
 
