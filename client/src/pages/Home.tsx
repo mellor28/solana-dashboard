@@ -40,7 +40,7 @@ export default function Home() {
   const priceChange30d = solanaDetail?.market_data?.price_change_percentage_30d;
   const { apy30d } = useMarinadeApy();
   const activeApy = apy30d?.apy ?? 6.10;
-  const { stakeAmount, originalStake, rewardsAccumulated, lastSynced, setStakeAmount, resetOriginalStake } = useStakeAmount();
+  const { stakeAmount, currentStake, baseStake, originalStake, rewardsAccumulated, epochRewards, epochsElapsed, currentEpoch, lastSynced, setStakeAmount, resetOriginalStake } = useStakeAmount(activeApy);
 
   return (
     <div
@@ -269,8 +269,11 @@ export default function Home() {
           <StakingTracker
             solPrice={solana?.current_price ?? 0}
             stakeAmount={stakeAmount}
+            baseStake={baseStake}
             originalStake={originalStake}
             rewardsAccumulated={rewardsAccumulated}
+            epochRewards={epochRewards}
+            epochsElapsed={epochsElapsed}
             lastSynced={lastSynced}
             onStakeAmountChange={setStakeAmount}
           />

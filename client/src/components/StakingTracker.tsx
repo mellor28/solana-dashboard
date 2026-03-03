@@ -43,9 +43,12 @@ const MARINADE_URL = "https://marinade.finance";
 
 interface StakingTrackerProps {
   solPrice: number;
-  stakeAmount: number;
+  stakeAmount: number;       // auto-incremented estimated balance
+  baseStake: number;         // confirmed balance at last manual sync
   originalStake: number;
   rewardsAccumulated: number;
+  epochRewards: number;      // rewards earned since last manual sync
+  epochsElapsed: number;     // epochs elapsed since last manual sync
   lastSynced: Date | null;
   onStakeAmountChange: (amount: number) => void;
 }
@@ -122,7 +125,7 @@ function ProjectionTooltip({ active, payload, label, solPrice }: any) {
   return null;
 }
 
-export default function StakingTracker({ solPrice, stakeAmount, originalStake, rewardsAccumulated, lastSynced, onStakeAmountChange }: StakingTrackerProps) {
+export default function StakingTracker({ solPrice, stakeAmount, baseStake, originalStake, rewardsAccumulated, epochRewards, epochsElapsed, lastSynced, onStakeAmountChange }: StakingTrackerProps) {
   const [stakeInput, setStakeInput] = useState(stakeAmount.toFixed(4));
   const [isEditingStake, setIsEditingStake] = useState(false);
 
@@ -481,19 +484,31 @@ export default function StakingTracker({ solPrice, stakeAmount, originalStake, r
               ≈ ${(stakeAmount * solPrice).toLocaleString("en-US", { maximumFractionDigits: 0 })} USD
             </div>
           )}
-          {rewardsAccumulated > 0 && (
-            <div style={{ marginTop: 8, padding: "6px 10px", borderRadius: 6, background: "rgba(20,241,149,0.07)", border: "1px solid rgba(20,241,149,0.15)" }}>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "'DM Sans', sans-serif", marginBottom: 2 }}>Rewards accumulated</div>
-              <div style={{ fontSize: 14, fontFamily: "'Space Mono', monospace", fontWeight: 700, color: "#14F195" }}>
-                +{rewardsAccumulated.toFixed(4)} SOL
+          {/* Auto-increment epoch rewards badge */}
+          {epochsElapsed > 0 && epochRewards > 0 && (
+            <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 6, background: "rgba(153,69,255,0.08)", border: "1px solid rgba(153,69,255,0.2)" }}>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "'DM Sans', sans-serif", marginBottom: 3, display: "flex", alignItems: "center", gap: 4 }}>
+                <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#9945FF", boxShadow: "0 0 4px #9945FF" }} />
+                Est. since last sync · {epochsElapsed} epoch{epochsElapsed !== 1 ? "s" : ""}
+              </div>
+              <div style={{ fontSize: 14, fontFamily: "'Space Mono', monospace", fontWeight: 700, color: "#9945FF" }}>
+                +{epochRewards.toFixed(4)} SOL
               </div>
               {solPrice > 0 && (
-                <div style={{ fontSize: 11, color: "rgba(20,241,149,0.5)", fontFamily: "'Space Mono', monospace" }}>
-                  ≈ +${(rewardsAccumulated * solPrice).toLocaleString("en-US", { maximumFractionDigits: 2 })} USD
+                <div style={{ fontSize: 11, color: "rgba(153,69,255,0.6)", fontFamily: "'Space Mono', monospace" }}>
+                  ≈ +${(epochRewards * solPrice).toLocaleString("en-US", { maximumFractionDigits: 2 })} USD
                 </div>
               )}
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontFamily: "'DM Sans', sans-serif", marginTop: 2 }}>
-                vs original {originalStake.toFixed(4)} SOL
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", fontFamily: "'DM Sans', sans-serif", marginTop: 3 }}>
+                Confirmed: {baseStake.toFixed(4)} SOL
+              </div>
+            </div>
+          )}
+          {rewardsAccumulated > epochRewards && (
+            <div style={{ marginTop: 6, padding: "6px 10px", borderRadius: 6, background: "rgba(20,241,149,0.07)", border: "1px solid rgba(20,241,149,0.12)" }}>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "'DM Sans', sans-serif", marginBottom: 2 }}>Total vs original stake</div>
+              <div style={{ fontSize: 13, fontFamily: "'Space Mono', monospace", fontWeight: 700, color: "#14F195" }}>
+                +{rewardsAccumulated.toFixed(4)} SOL
               </div>
             </div>
           )}
