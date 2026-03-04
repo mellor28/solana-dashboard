@@ -7,12 +7,14 @@
 import { TrendingUp, TrendingDown, Activity, DollarSign, BarChart3 } from "lucide-react";
 import { useCountUp } from "@/hooks/useCountUp";
 import { formatCurrency, formatNumber, type CoinData } from "@/hooks/useCryptoData";
+import { useEffect, useState } from "react";
 
 interface SolanaHeroProps {
   solana: CoinData | null;
   loading: boolean;
   priceChange7d?: number;
   priceChange30d?: number;
+  jupPrice?: number;
 }
 
 function StatBadge({
@@ -101,9 +103,27 @@ function StatBadge({
   );
 }
 
-export default function SolanaHero({ solana, loading, priceChange7d, priceChange30d }: SolanaHeroProps) {
+export default function SolanaHero({ solana, loading, priceChange7d, priceChange30d, jupPrice = 0 }: SolanaHeroProps) {
   const animatedPrice = useCountUp(solana?.current_price ?? 0, 1200, 2);
+  const animatedJupPrice = useCountUp(jupPrice, 1200, 4);
   const isPositive = (solana?.price_change_percentage_24h ?? 0) >= 0;
+
+  // JUP 24h change from Binance
+  const [jupChange24h, setJupChange24h] = useState<number>(0);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch("https://api.binance.com/api/v3/ticker/24hr?symbol=JUPUSDT");
+        const d = await res.json();
+        const pct = parseFloat(d.priceChangePercent);
+        if (!isNaN(pct)) setJupChange24h(pct);
+      } catch {}
+    };
+    load();
+    const id = setInterval(load, 5 * 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const jupIsPositive = jupChange24h >= 0;
 
   return (
     <div
@@ -146,7 +166,9 @@ export default function SolanaHero({ solana, loading, priceChange7d, priceChange
         }}
       >
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          {/* Left: Price */}
+          {/* Left: SOL + JUP prices side by side */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 32, flexWrap: "wrap" }}>
+          {/* SOL price block */}
           <div>
             <div className="flex items-center gap-3 mb-2">
               <div
@@ -262,6 +284,60 @@ export default function SolanaHero({ solana, loading, priceChange7d, priceChange
               </div>
             )}
           </div>
+
+          {/* JUP price block */}
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              {/* JUP logo */}
+              <div style={{
+                background: "linear-gradient(135deg, #C7B8FF, #9945FF)",
+                borderRadius: "50%",
+                width: 40, height: 40,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 0 20px rgba(153,69,255,0.4)",
+                flexShrink: 0,
+                fontSize: 18, fontWeight: 700, color: "white",
+                fontFamily: "'DM Sans', sans-serif",
+              }}>
+                J
+              </div>
+              <div>
+                <span style={{ fontSize: 22, fontWeight: 700, color: "white", fontFamily: "'DM Sans', sans-serif" }}>
+                  Jupiter
+                </span>
+                <span style={{ marginLeft: 8, fontSize: 13, color: "rgba(255,255,255,0.45)", fontFamily: "'Space Mono', monospace" }}>
+                  JUP / USD
+                </span>
+              </div>
+            </div>
+
+            {jupPrice === 0 ? (
+              <div style={{ width: 160, height: 64, background: "rgba(255,255,255,0.08)", borderRadius: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
+            ) : (
+              <div className="flex items-baseline gap-4">
+                <div className="mono-number" style={{
+                  fontSize: 56, fontWeight: 700, color: "white", lineHeight: 1,
+                  textShadow: "0 0 30px rgba(153,69,255,0.3)",
+                  fontFamily: "'Space Mono', monospace",
+                }}>
+                  ${animatedJupPrice.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                </div>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 4,
+                  background: jupIsPositive ? "rgba(20,241,149,0.15)" : "rgba(255,107,107,0.15)",
+                  border: `1px solid ${jupIsPositive ? "rgba(20,241,149,0.3)" : "rgba(255,107,107,0.3)"}`,
+                  borderRadius: 8, padding: "4px 10px",
+                }}>
+                  {jupIsPositive ? <TrendingUp size={14} color="#14F195" /> : <TrendingDown size={14} color="#FF6B6B" />}
+                  <span style={{ fontSize: 14, fontFamily: "'Space Mono', monospace", fontWeight: 700, color: jupIsPositive ? "#14F195" : "#FF6B6B" }}>
+                    {jupIsPositive ? "+" : ""}{jupChange24h.toFixed(2)}%
+                  </span>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'DM Sans', sans-serif" }}>24h</span>
+                </div>
+              </div>
+            )}
+          </div>
+          </div>{/* end price blocks */}
 
           {/* Right: Stats grid */}
           <div className="flex flex-wrap gap-3">

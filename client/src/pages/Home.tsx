@@ -129,6 +129,7 @@ export default function Home() {
             loading={loading}
             priceChange7d={priceChange7d}
             priceChange30d={priceChange30d}
+            jupPrice={jupPrice}
           />
 
           {/* ── EPOCH BANNER ── */}
