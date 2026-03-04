@@ -29,6 +29,7 @@ import MeteoraStats from "@/components/MeteoraStats";
 import StablecoinTracker from "@/components/StablecoinTracker";
 import BridgeFlowMonitor from "@/components/BridgeFlowMonitor";
 import ChainTVLComparison from "@/components/ChainTVLComparison";
+import EpochBanner from "@/components/EpochBanner";
 import { useMarinadeApy } from "@/hooks/useMarinadeApy";
 import { AlertCircle } from "lucide-react";
 
@@ -129,6 +130,9 @@ export default function Home() {
             priceChange7d={priceChange7d}
             priceChange30d={priceChange30d}
           />
+
+          {/* ── EPOCH BANNER ── */}
+          <EpochBanner />
 
           {/* ── PORTFOLIO NET WORTH ── */}
           <PortfolioNetWorth
