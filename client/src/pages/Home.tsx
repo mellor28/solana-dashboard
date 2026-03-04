@@ -23,7 +23,9 @@ import FearGreedWidget from "@/components/FearGreedWidget";
 import JupiterWidget from "@/components/JupiterWidget";
 import PortfolioNetWorth from "@/components/PortfolioNetWorth";
 import NetworkHealth from "@/components/NetworkHealth";
-import NewsFeed from "@/components/NewsFeed";
+import SolanaDeFiEcosystem from "@/components/SolanaDeFiEcosystem";
+import SolanaStakingOverview from "@/components/SolanaStakingOverview";
+import MeteoraStats from "@/components/MeteoraStats";
 import { useMarinadeApy } from "@/hooks/useMarinadeApy";
 import { AlertCircle } from "lucide-react";
 
@@ -275,8 +277,16 @@ export default function Home() {
             loading={loading}
           />
 
-          {/* ── CRYPTO NEWS FEED ── */}
-          <NewsFeed />
+          {/* ── SOLANA DEFI ECOSYSTEM ── */}
+          <SolanaDeFiEcosystem />
+
+          {/* ── METEORA DLMM POOLS ── */}
+          <section id="meteora" style={{ marginBottom: 0 }}>
+            <MeteoraStats />
+          </section>
+
+          {/* ── NETWORK STAKING OVERVIEW ── */}
+          <SolanaStakingOverview />
 
           {/* Jupiter Staking Widget */}
           <JupiterWidget />
@@ -309,7 +319,7 @@ export default function Home() {
                 fontFamily: "'Space Mono', monospace",
               }}
             >
-              Data from CoinGecko, DeFiLlama & Cointelegraph · Refreshes every 5 minutes · Not financial advice
+              Data from CoinGecko, DeFiLlama, Meteora & Solana RPC · Refreshes every 5 minutes · Not financial advice
             </div>
             <div
               style={{

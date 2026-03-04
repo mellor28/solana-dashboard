@@ -18,8 +18,9 @@ const NAV_ITEMS = [
   { label: "Portfolio", href: "#portfolio" },
   { label: "Market", href: "#market-overview" },
   { label: "Network", href: "#network" },
-  { label: "Adoption", href: "#adoption" },
-  { label: "News", href: "#news" },
+  { label: "TVL", href: "#adoption" },
+  { label: "DeFi", href: "#defi" },
+  { label: "Meteora", href: "#meteora" },
   { label: "Staking", href: "#staking" },
 ];
 
