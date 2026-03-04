@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { label: "Network", href: "#network" },
   { label: "TVL", href: "#adoption" },
   { label: "DeFi", href: "#defi" },
+  { label: "Stables", href: "#stablecoins" },
   { label: "Meteora", href: "#meteora" },
   { label: "Staking", href: "#staking" },
 ];

@@ -26,6 +26,7 @@ import NetworkHealth from "@/components/NetworkHealth";
 import SolanaDeFiEcosystem from "@/components/SolanaDeFiEcosystem";
 import SolanaStakingOverview from "@/components/SolanaStakingOverview";
 import MeteoraStats from "@/components/MeteoraStats";
+import StablecoinTracker from "@/components/StablecoinTracker";
 import { useMarinadeApy } from "@/hooks/useMarinadeApy";
 import { AlertCircle } from "lucide-react";
 
@@ -279,6 +280,9 @@ export default function Home() {
 
           {/* ── SOLANA DEFI ECOSYSTEM ── */}
           <SolanaDeFiEcosystem />
+
+          {/* ── STABLECOIN SUPPLY TRACKER ── */}
+          <StablecoinTracker />
 
           {/* ── METEORA DLMM POOLS ── */}
           <section id="meteora" style={{ marginBottom: 0 }}>
