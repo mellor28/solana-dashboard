@@ -21,6 +21,7 @@ import { Activity, Cpu, Server, Zap, RefreshCw, CheckCircle, AlertTriangle, XCir
 // publicnode has CORS wildcard (*) and supports getRecentPerformanceSamples
 const PUBLICNODE_URL = "https://solana-rpc.publicnode.com";
 const HELIUS_URL = `https://mainnet.helius-rpc.com/?api-key=d34a711e-1e25-489a-8652-2d8709d22b4c`;
+const STATUSPAGE_URL = "https://status.solana.com/api/v2";
 
 interface NetworkData {
   slot: number;
@@ -37,10 +38,47 @@ interface NetworkData {
   fetchedAt: Date;
 }
 
+// Statuspage incident data
+interface StatusIncident {
+  id: string;
+  name: string;
+  impact: "none" | "minor" | "major" | "critical" | "maintenance";
+  created_at: string;
+  resolved_at: string | null;
+  components: Array<{ name: string }>;
+}
+
+interface ComponentStatus {
+  name: string;
+  status: string;
+}
+
+interface UptimeData {
+  overallStatus: string;
+  overallIndicator: string;
+  components: ComponentStatus[];
+  incidents: StatusIncident[];
+}
+
 interface TpsPoint {
   time: string;       // "HH:MM" label
   tps: number;        // total TPS
   nonVoteTps: number; // non-vote TPS
+}
+
+async function fetchUptimeData(): Promise<UptimeData> {
+  const [summaryRes, incidentsRes] = await Promise.all([
+    fetch(`${STATUSPAGE_URL}/summary.json`),
+    fetch(`${STATUSPAGE_URL}/incidents.json`),
+  ]);
+  const summary = await summaryRes.json();
+  const incData = await incidentsRes.json();
+  return {
+    overallStatus: summary.status.description,
+    overallIndicator: summary.status.indicator,
+    components: summary.components as ComponentStatus[],
+    incidents: incData.incidents as StatusIncident[],
+  };
 }
 
 async function rpcPost(url: string, method: string, params: unknown[] = []) {
@@ -119,13 +157,235 @@ function TpsTooltip({ active, payload, label }: any) {
   );
 }
 
+// ─── Uptime Bars Component ───────────────────────────────────────────────────
+
+const IMPACT_COLOR: Record<string, string> = {
+  none: "rgba(255,255,255,0.08)",
+  minor: "#FFB800",
+  major: "#FF8C42",
+  critical: "#FF4444",
+  maintenance: "#9945FF",
+};
+
+const IMPACT_LABEL: Record<string, string> = {
+  none: "No incident",
+  minor: "Minor",
+  major: "Major",
+  critical: "Critical",
+  maintenance: "Maintenance",
+};
+
+function buildDayMap(
+  incidents: StatusIncident[],
+  componentName: string,
+  days: number
+): Array<{ date: string; impact: string; incidents: StatusIncident[] }> {
+  const today = new Date();
+  const result = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const dayIncidents = incidents.filter((inc) => {
+      const incDate = inc.created_at.slice(0, 10);
+      const matchesComp =
+        inc.components.length === 0 ||
+        inc.components.some((c) => c.name === componentName || componentName === "Overall");
+      return incDate === dateStr && matchesComp;
+    });
+    const worstImpact = dayIncidents.reduce(
+      (worst, inc) => {
+        const order = ["none", "minor", "major", "critical", "maintenance"];
+        return order.indexOf(inc.impact) > order.indexOf(worst) ? inc.impact : worst;
+      },
+      "operational"
+    );
+    result.push({ date: dateStr, impact: worstImpact, incidents: dayIncidents });
+  }
+  return result;
+}
+
+function UptimeBars({
+  uptimeData,
+  hoveredDay,
+  setHoveredDay,
+}: {
+  uptimeData: UptimeData;
+  hoveredDay: { day: string; incidents: StatusIncident[]; x: number; y: number } | null;
+  setHoveredDay: (v: { day: string; incidents: StatusIncident[]; x: number; y: number } | null) => void;
+}) {
+  const DAYS = 90;
+  // Show only the 3 most important components
+  const KEY_COMPONENTS = [
+    "Mainnet Beta - Cluster",
+    "Mainnet Beta - RPC Nodes",
+    "Explorer",
+  ];
+
+  const overallColor =
+    uptimeData.overallIndicator === "none"
+      ? "#14F195"
+      : uptimeData.overallIndicator === "minor"
+      ? "#FFB800"
+      : "#FF4444";
+
+  return (
+    <div
+      style={{
+        marginTop: 20,
+        background: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        borderRadius: 12,
+        padding: "14px 16px",
+      }}
+    >
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)", fontFamily: "'DM Sans', sans-serif" }}>
+            Service Uptime
+          </div>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "'Space Mono', monospace" }}>
+            LAST 90 DAYS · STATUS.SOLANA.COM
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: overallColor }} />
+          <span style={{ fontSize: 11, color: overallColor, fontFamily: "'Space Mono', monospace" }}>
+            {uptimeData.overallStatus}
+          </span>
+        </div>
+      </div>
+
+      {/* Component rows */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {KEY_COMPONENTS.map((compName) => {
+          const days = buildDayMap(uptimeData.incidents, compName, DAYS);
+          const incidentCount = days.filter((d) => d.incidents.length > 0).length;
+          const uptimePct = (((DAYS - incidentCount) / DAYS) * 100).toFixed(2);
+          return (
+            <div key={compName}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontFamily: "'DM Sans', sans-serif" }}>
+                  {compName}
+                </span>
+                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "'Space Mono', monospace" }}>
+                  {uptimePct}% uptime
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 2, alignItems: "stretch", height: 28, position: "relative" }}>
+                {days.map((day) => {
+                  const hasIncident = day.incidents.length > 0;
+                  const barColor = hasIncident
+                    ? IMPACT_COLOR[day.incidents[0].impact] ?? "#FFB800"
+                    : "#14F195";
+                  return (
+                    <div
+                      key={day.date}
+                      title={hasIncident ? day.incidents.map((i) => i.name).join(", ") : day.date}
+                      onMouseEnter={(e) => {
+                        if (hasIncident) {
+                          setHoveredDay({
+                            day: day.date,
+                            incidents: day.incidents,
+                            x: e.clientX,
+                            y: e.clientY,
+                          });
+                        }
+                      }}
+                      onMouseLeave={() => setHoveredDay(null)}
+                      style={{
+                        flex: 1,
+                        borderRadius: 2,
+                        background: hasIncident ? barColor : "rgba(20,241,149,0.35)",
+                        border: hasIncident ? `1px solid ${barColor}` : "none",
+                        cursor: hasIncident ? "pointer" : "default",
+                        transition: "opacity 0.15s",
+                        minWidth: 0,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 14, marginTop: 10, alignItems: "center" }}>
+        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontFamily: "'Space Mono', monospace" }}>90 days ago</span>
+        <div style={{ flex: 1 }} />
+        {Object.entries(IMPACT_LABEL)
+          .filter(([k]) => k !== "none")
+          .map(([impact, label]) => (
+            <div key={impact} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <div style={{ width: 8, height: 8, borderRadius: 2, background: IMPACT_COLOR[impact] }} />
+              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Space Mono', monospace" }}>{label}</span>
+            </div>
+          ))}
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <div style={{ width: 8, height: 8, borderRadius: 2, background: "rgba(20,241,149,0.35)" }} />
+          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Space Mono', monospace" }}>Operational</span>
+        </div>
+        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontFamily: "'Space Mono', monospace" }}>Today</span>
+      </div>
+
+      {/* Hover tooltip */}
+      {hoveredDay && (
+        <div
+          style={{
+            position: "fixed",
+            left: hoveredDay.x + 12,
+            top: hoveredDay.y - 10,
+            background: "rgba(10,10,20,0.95)",
+            border: "1px solid rgba(153,69,255,0.4)",
+            borderRadius: 8,
+            padding: "8px 12px",
+            zIndex: 9999,
+            pointerEvents: "none",
+            maxWidth: 260,
+          }}
+        >
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace", marginBottom: 4 }}>
+            {hoveredDay.day}
+          </div>
+          {hoveredDay.incidents.map((inc) => (
+            <div key={inc.id} style={{ marginBottom: 3 }}>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: IMPACT_COLOR[inc.impact] ?? "#FFB800",
+                  fontFamily: "'Space Mono', monospace",
+                  textTransform: "uppercase",
+                  marginRight: 6,
+                }}
+              >
+                {IMPACT_LABEL[inc.impact]}
+              </span>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.8)", fontFamily: "'DM Sans', sans-serif" }}>
+                {inc.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function NetworkHealth() {
   const [data, setData] = useState<NetworkData | null>(null);
   const [tpsHistory, setTpsHistory] = useState<TpsPoint[]>([]);
+  const [uptimeData, setUptimeData] = useState<UptimeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [hoveredDay, setHoveredDay] = useState<{ day: string; incidents: StatusIncident[]; x: number; y: number } | null>(null);
   // Keep a rolling buffer of live TPS points appended every 30s
   const liveBuffer = useRef<TpsPoint[]>([]);
 
@@ -218,14 +478,24 @@ export default function NetworkHealth() {
     }
   }, []);
 
+  const fetchUptime = useCallback(async () => {
+    try {
+      const ud = await fetchUptimeData();
+      setUptimeData(ud);
+    } catch { /* silent */ }
+  }, []);
+
   useEffect(() => {
     fetchTpsHistory();
     fetchData();
+    fetchUptime();
     const interval = setInterval(() => fetchData(), 30_000);
     // Refresh full history every 30 minutes
     const histInterval = setInterval(() => fetchTpsHistory(), 30 * 60_000);
-    return () => { clearInterval(interval); clearInterval(histInterval); };
-  }, [fetchData, fetchTpsHistory]);
+    // Refresh uptime every 5 minutes
+    const uptimeInterval = setInterval(() => fetchUptime(), 5 * 60_000);
+    return () => { clearInterval(interval); clearInterval(histInterval); clearInterval(uptimeInterval); };
+  }, [fetchData, fetchTpsHistory, fetchUptime]);
 
   const congestion = data ? getCongestionStatus(data.tps) : null;
   const epochProgress = data ? (data.slotIndex / data.slotsInEpoch) * 100 : 0;
@@ -462,6 +732,16 @@ export default function NetworkHealth() {
             </span>
           </div>
 
+          {/* Uptime Status Bars */}
+          {uptimeData && (
+            <UptimeBars
+              uptimeData={uptimeData}
+              hoveredDay={hoveredDay}
+              setHoveredDay={setHoveredDay}
+            />
+          )}
+
+          {/* Last updated */}
           <div style={{ marginTop: 10, fontSize: 11, color: "rgba(255,255,255,0.2)", fontFamily: "'Space Mono', monospace", textAlign: "right" }}>
             Updated {data.fetchedAt.toLocaleTimeString()}
           </div>
