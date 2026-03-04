@@ -21,6 +21,8 @@ const NAV_ITEMS = [
   { label: "TVL", href: "#adoption" },
   { label: "DeFi", href: "#defi" },
   { label: "Stables", href: "#stablecoins" },
+  { label: "Bridges", href: "#bridge-flows" },
+  { label: "Chains", href: "#chain-comparison" },
   { label: "Meteora", href: "#meteora" },
   { label: "Staking", href: "#staking" },
 ];

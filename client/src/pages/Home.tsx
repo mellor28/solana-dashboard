@@ -27,6 +27,8 @@ import SolanaDeFiEcosystem from "@/components/SolanaDeFiEcosystem";
 import SolanaStakingOverview from "@/components/SolanaStakingOverview";
 import MeteoraStats from "@/components/MeteoraStats";
 import StablecoinTracker from "@/components/StablecoinTracker";
+import BridgeFlowMonitor from "@/components/BridgeFlowMonitor";
+import ChainTVLComparison from "@/components/ChainTVLComparison";
 import { useMarinadeApy } from "@/hooks/useMarinadeApy";
 import { AlertCircle } from "lucide-react";
 
@@ -283,6 +285,12 @@ export default function Home() {
 
           {/* ── STABLECOIN SUPPLY TRACKER ── */}
           <StablecoinTracker />
+
+          {/* ── BRIDGE FLOW MONITOR ── */}
+          <BridgeFlowMonitor />
+
+          {/* ── CHAIN TVL COMPARISON ── */}
+          <ChainTVLComparison />
 
           {/* ── METEORA DLMM POOLS ── */}
           <section id="meteora" style={{ marginBottom: 0 }}>
