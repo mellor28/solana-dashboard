@@ -87,7 +87,7 @@ export default function CryptoTable({ coins, loading }: CryptoTableProps) {
                 borderBottom: "1px solid rgba(255,255,255,0.06)",
               }}
             >
-              {["#", "Asset", "Price", "24h", "7d", "Market Cap"].map((h) => (
+                {["#", "Asset", "Price", "24h", "7d", "30d", "Market Cap"].map((h) => (
                 <th
                   key={h}
                   style={{
@@ -221,6 +221,11 @@ export default function CryptoTable({ coins, loading }: CryptoTableProps) {
                     <td style={{ padding: "12px 16px", textAlign: "right" }}>
                       <ChangeCell
                         value={coin.price_change_percentage_7d_in_currency ?? 0}
+                      />
+                    </td>
+                    <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                      <ChangeCell
+                        value={coin.price_change_percentage_30d_in_currency ?? 0}
                       />
                     </td>
                     <td

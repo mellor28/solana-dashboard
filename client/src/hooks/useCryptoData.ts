@@ -27,6 +27,7 @@ export interface CoinData {
   market_cap_rank: number;
   price_change_percentage_24h: number;
   price_change_percentage_7d_in_currency?: number;
+  price_change_percentage_30d_in_currency?: number;
   total_volume: number;
   circulating_supply: number;
   ath: number;
@@ -222,6 +223,7 @@ export function useCryptoData() {
           market_cap_rank: cfg.rank,
           price_change_percentage_24h: t?.change24h ?? 0,
           price_change_percentage_7d_in_currency: 0, // filled below
+          price_change_percentage_30d_in_currency: 0, // filled below
           total_volume: t?.volume ?? 0,
           circulating_supply: 0,
           ath: 0,
@@ -267,7 +269,7 @@ export function useCryptoData() {
         lastUpdated: new Date(),
       });
 
-      // Step 2: Enrich with CoinGecko supplementary data (market cap, ATH, supply, rank, 7d change)
+      // Step 2: Enrich with CoinGecko supplementary data (market cap, ATH, supply, rank, 7d/30d change)
       // This runs in background and updates the state when ready
       Promise.allSettled([
         fetchCoinGeckoSupplementary(),
@@ -281,10 +283,21 @@ export function useCryptoData() {
             return { id: c.id, change7d: ((now - old) / old) * 100 };
           }).catch(() => ({ id: c.id, change7d: 0 }))
         ),
+        // Fetch 30d changes for all coins from Binance klines in parallel
+        ...COIN_CONFIG.map(c =>
+          fetchBinanceKlines(c.binance, 31).then(klines => {
+            if (klines.length < 2) return { id: c.id, change30d: 0 };
+            const old = klines[0].price;
+            const now = klines[klines.length - 1].price;
+            return { id: c.id, change30d: ((now - old) / old) * 100 };
+          }).catch(() => ({ id: c.id, change30d: 0 }))
+        ),
       ]).then((results) => {
         const cgData = results[0].status === "fulfilled" ? results[0].value as Map<string, any> : null;
         const sol7d = results[1].status === "fulfilled" ? results[1].value as number : 0;
-        const coinChanges = results.slice(2).map(r => r.status === "fulfilled" ? r.value as { id: string; change7d: number } : null);
+        const numNon7dSol = COIN_CONFIG.filter(c => c.id !== "solana").length;
+        const coinChanges = results.slice(2, 2 + numNon7dSol).map(r => r.status === "fulfilled" ? r.value as { id: string; change7d: number } : null);
+        const coin30dChanges = results.slice(2 + numNon7dSol).map(r => r.status === "fulfilled" ? r.value as { id: string; change30d: number } : null);
 
         setState((prev) => {
           const enriched = prev.topCoins.map((coin) => {
@@ -292,6 +305,7 @@ export function useCryptoData() {
             const change7d = coin.id === "solana"
               ? sol7d
               : (coinChanges.find(c => c?.id === coin.id)?.change7d ?? coin.price_change_percentage_7d_in_currency ?? 0);
+            const change30d = coin30dChanges.find(c => c?.id === coin.id)?.change30d ?? 0;
             return {
               ...coin,
               market_cap: cg?.market_cap ?? coin.market_cap,
@@ -300,6 +314,7 @@ export function useCryptoData() {
               ath: cg?.ath ?? coin.ath,
               ath_change_percentage: cg?.ath_change ?? coin.ath_change_percentage,
               price_change_percentage_7d_in_currency: change7d,
+              price_change_percentage_30d_in_currency: change30d,
             };
           });
 
