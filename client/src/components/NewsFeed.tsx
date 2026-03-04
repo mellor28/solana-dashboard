@@ -1,112 +1,118 @@
 /**
- * NewsFeed — Live crypto news feed widget
+ * NewsFeed — Watcher.Guru live news feed
  * Design: Glassmorphic Space Dashboard
- * Fetches latest headlines from CryptoCompare News API (free, no key, CORS wildcard)
- * Shows SOL-focused news by default, with toggle to general crypto news.
- * Auto-refreshes every 10 minutes.
+ *
+ * Fetches from Watcher.Guru RSS via rss2json.com (free, CORS wildcard).
+ * Rolling window: max 10 articles. On each refresh, new articles are
+ * prepended and any beyond 10 are dropped — old news disappears automatically.
+ * Auto-refreshes every 5 minutes.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Newspaper, ExternalLink, RefreshCw, Clock } from "lucide-react";
 
+const MAX_ARTICLES = 10;
+const REFRESH_INTERVAL_MS = 5 * 60_000; // 5 minutes
+const RSS2JSON_URL =
+  "https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fwatcher.guru%2Fnews%2Ffeed&count=10";
+
 interface NewsItem {
+  guid: string;
   title: string;
-  url: string;
-  publishedOn: number;
-  source: string;
-  body?: string;
+  link: string;
+  pubDate: string; // "2026-03-03 19:27:59"
+  thumbnail: string;
+  description: string;
 }
 
-// CryptoCompare News API — free tier, CORS wildcard, no key required
-const BASE_URL = "https://min-api.cryptocompare.com/data/v2/news/?lang=EN";
-const SOURCES = [
-  { label: "Solana", url: `${BASE_URL}&categories=SOL&limit=8` },
-  { label: "Crypto", url: `${BASE_URL}&limit=8` },
-];
-
-function timeAgo(ts: number): string {
-  const diffMs = Date.now() - ts * 1000;
+function timeAgo(pubDate: string): string {
+  // pubDate format: "2026-03-03 19:27:59"
+  const ts = new Date(pubDate.replace(" ", "T") + "Z").getTime();
+  if (isNaN(ts)) return pubDate;
+  const diffMs = Date.now() - ts;
   const diffMin = Math.floor(diffMs / 60_000);
   const diffHr = Math.floor(diffMin / 60);
   const diffDay = Math.floor(diffHr / 24);
-
   if (diffMin < 1) return "just now";
   if (diffMin < 60) return `${diffMin}m ago`;
   if (diffHr < 24) return `${diffHr}h ago`;
   return `${diffDay}d ago`;
 }
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, "").replace(/&[a-z]+;/gi, " ").trim();
+}
+
 function truncate(text: string, maxLen: number): string {
-  if (!text) return "";
-  const clean = text.replace(/<[^>]*>/g, "").trim();
+  const clean = stripHtml(text);
   return clean.length > maxLen ? clean.slice(0, maxLen) + "…" : clean;
 }
 
 export default function NewsFeed() {
-  const [news, setNews] = useState<NewsItem[]>([]);
+  const [articles, setArticles] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
-  const [sourceIdx, setSourceIdx] = useState(0);
+  // Track which guids are "new" (added in the latest fetch) for highlight animation
+  const [newGuids, setNewGuids] = useState<Set<string>>(new Set());
+  const seenGuidsRef = useRef<Set<string>>(new Set());
 
-  const fetchNews = useCallback(
-    async (manual = false) => {
-      if (manual) setRefreshing(true);
+  const fetchNews = useCallback(async (manual = false) => {
+    if (manual) setRefreshing(true);
+    try {
+      const res = await fetch(RSS2JSON_URL);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.status !== "ok") throw new Error(data.message ?? "Feed error");
 
-      const src = SOURCES[sourceIdx];
-      try {
-        const res = await fetch(src.url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+      const incoming: NewsItem[] = (data.items ?? []).map((item: any) => ({
+        guid: item.guid || item.link,
+        title: item.title,
+        link: item.link,
+        pubDate: item.pubDate,
+        thumbnail: item.thumbnail || "",
+        description: item.description || "",
+      }));
 
-        if (data.Data && data.Data.length > 0) {
-          const items: NewsItem[] = data.Data.slice(0, 7).map(
-            (item: {
-              title: string;
-              url: string;
-              published_on: number;
-              source_info?: { name?: string };
-              source?: string;
-              body?: string;
-            }) => ({
-              title: item.title,
-              url: item.url,
-              publishedOn: item.published_on,
-              source: item.source_info?.name ?? item.source ?? "CryptoCompare",
-              body: item.body ? truncate(item.body, 120) : undefined,
-            })
-          );
-          setNews(items);
-          setLastFetched(new Date());
-          setError(null);
-        } else {
-          setError("No news available at this time");
+      // Merge: prepend genuinely new items, keep rolling window of MAX_ARTICLES
+      setArticles((prev) => {
+        const prevGuids = new Set(prev.map((a) => a.guid));
+        const fresh = incoming.filter((a) => !prevGuids.has(a.guid));
+        const merged = [...fresh, ...prev].slice(0, MAX_ARTICLES);
+
+        // Track new guids for flash animation
+        const freshGuids = new Set(fresh.map((a) => a.guid));
+        if (freshGuids.size > 0) {
+          setNewGuids(freshGuids);
+          setTimeout(() => setNewGuids(new Set()), 2000);
         }
-      } catch (err) {
-        setError("Unable to load news — will retry shortly");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [sourceIdx]
-  );
+
+        // Update seen set
+        merged.forEach((a) => seenGuidsRef.current.add(a.guid));
+        return merged;
+      });
+
+      setLastFetched(new Date());
+      setError(null);
+    } catch (err: any) {
+      setError("Unable to load news — will retry shortly");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   // Initial load
   useEffect(() => {
-    setLoading(true);
-    setNews([]);
     fetchNews();
-  }, [sourceIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-refresh every 10 minutes
+  // Auto-refresh every 5 minutes
   useEffect(() => {
-    const interval = setInterval(() => fetchNews(), 10 * 60_000);
-    return () => clearInterval(interval);
+    const id = setInterval(() => fetchNews(), REFRESH_INTERVAL_MS);
+    return () => clearInterval(id);
   }, [fetchNews]);
-
-  const currentSource = SOURCES[sourceIdx];
 
   return (
     <div
@@ -130,6 +136,7 @@ export default function NewsFeed() {
               height: 36,
               borderRadius: 10,
               background: "rgba(20,241,149,0.12)",
+              border: "1px solid rgba(20,241,149,0.2)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -146,7 +153,7 @@ export default function NewsFeed() {
                 fontFamily: "'DM Sans', sans-serif",
               }}
             >
-              Crypto News
+              Watcher.Guru News
             </div>
             <div
               style={{
@@ -155,46 +162,28 @@ export default function NewsFeed() {
                 fontFamily: "'Space Mono', monospace",
               }}
             >
-              {currentSource.label.toUpperCase()} · AUTO-REFRESH 10m
+              LIVE · MAX 10 · AUTO-REFRESH 5m
             </div>
           </div>
         </div>
+
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {/* Source toggle tabs */}
-          <div
-            style={{
-              display: "flex",
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 8,
-              overflow: "hidden",
-            }}
-          >
-            {SOURCES.map((src, idx) => (
-              <button
-                key={src.label}
-                onClick={() => setSourceIdx(idx)}
-                style={{
-                  padding: "5px 12px",
-                  cursor: "pointer",
-                  fontSize: 11,
-                  fontFamily: "'Space Mono', monospace",
-                  border: "none",
-                  background:
-                    idx === sourceIdx
-                      ? "rgba(20,241,149,0.15)"
-                      : "transparent",
-                  color:
-                    idx === sourceIdx
-                      ? "#14F195"
-                      : "rgba(255,255,255,0.4)",
-                  transition: "all 0.15s ease",
-                }}
-              >
-                {src.label}
-              </button>
-            ))}
-          </div>
+          {/* Article count badge */}
+          {articles.length > 0 && !loading && (
+            <div
+              style={{
+                background: "rgba(20,241,149,0.1)",
+                border: "1px solid rgba(20,241,149,0.2)",
+                borderRadius: 20,
+                padding: "3px 10px",
+                fontSize: 11,
+                color: "#14F195",
+                fontFamily: "'Space Mono', monospace",
+              }}
+            >
+              {articles.length}/{MAX_ARTICLES}
+            </div>
+          )}
           {/* Refresh button */}
           <button
             onClick={() => fetchNews(true)}
@@ -203,14 +192,16 @@ export default function NewsFeed() {
               background: "rgba(255,255,255,0.06)",
               border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: 8,
-              padding: "6px 10px",
-              cursor: "pointer",
+              padding: "6px 12px",
+              cursor: refreshing ? "not-allowed" : "pointer",
               display: "flex",
               alignItems: "center",
               gap: 5,
               color: "rgba(255,255,255,0.6)",
               fontSize: 12,
               fontFamily: "'DM Sans', sans-serif",
+              opacity: refreshing ? 0.6 : 1,
+              transition: "opacity 0.15s",
             }}
           >
             <RefreshCw
@@ -224,17 +215,18 @@ export default function NewsFeed() {
         </div>
       </div>
 
-      {/* News list */}
+      {/* Content */}
       {loading ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[...Array(5)].map((_, i) => (
             <div
               key={i}
               style={{
-                height: 64,
+                height: 60,
                 background: "rgba(255,255,255,0.04)",
                 borderRadius: 10,
                 animation: "pulse 1.5s ease-in-out infinite",
+                animationDelay: `${i * 100}ms`,
               }}
             />
           ))}
@@ -242,7 +234,7 @@ export default function NewsFeed() {
       ) : error ? (
         <div
           style={{
-            padding: "20px",
+            padding: "24px",
             textAlign: "center",
             color: "rgba(255,107,107,0.8)",
             fontFamily: "'DM Sans', sans-serif",
@@ -253,131 +245,164 @@ export default function NewsFeed() {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {news.map((item, idx) => (
-            <a
-              key={idx}
-              href={item.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: "block",
-                padding: "12px 14px",
-                borderRadius: 10,
-                textDecoration: "none",
-                background: "transparent",
-                border: "1px solid transparent",
-                transition: "all 0.18s ease",
-                cursor: "pointer",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLAnchorElement).style.background =
-                  "rgba(255,255,255,0.04)";
-                (e.currentTarget as HTMLAnchorElement).style.borderColor =
-                  "rgba(255,255,255,0.08)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLAnchorElement).style.background =
-                  "transparent";
-                (e.currentTarget as HTMLAnchorElement).style.borderColor =
-                  "transparent";
-              }}
-            >
-              <div
+          {articles.map((item, idx) => {
+            const isNew = newGuids.has(item.guid);
+            return (
+              <a
+                key={item.guid}
+                href={item.link}
+                target="_blank"
+                rel="noopener noreferrer"
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
-                  justifyContent: "space-between",
-                  gap: 10,
+                  gap: 12,
+                  padding: "11px 12px",
+                  borderRadius: 10,
+                  textDecoration: "none",
+                  background: isNew
+                    ? "rgba(20,241,149,0.06)"
+                    : "transparent",
+                  border: isNew
+                    ? "1px solid rgba(20,241,149,0.15)"
+                    : "1px solid transparent",
+                  transition: "all 0.2s ease",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={(e) => {
+                  const el = e.currentTarget as HTMLAnchorElement;
+                  el.style.background = "rgba(255,255,255,0.04)";
+                  el.style.borderColor = "rgba(255,255,255,0.08)";
+                }}
+                onMouseLeave={(e) => {
+                  const el = e.currentTarget as HTMLAnchorElement;
+                  el.style.background = isNew
+                    ? "rgba(20,241,149,0.06)"
+                    : "transparent";
+                  el.style.borderColor = isNew
+                    ? "rgba(20,241,149,0.15)"
+                    : "transparent";
                 }}
               >
-                <div style={{ flex: 1 }}>
+                {/* Thumbnail */}
+                {item.thumbnail ? (
+                  <img
+                    src={item.thumbnail}
+                    alt=""
+                    style={{
+                      width: 52,
+                      height: 40,
+                      objectFit: "cover",
+                      borderRadius: 6,
+                      flexShrink: 0,
+                      opacity: 0.85,
+                    }}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display =
+                        "none";
+                    }}
+                  />
+                ) : (
                   <div
-                    style={{ display: "flex", alignItems: "flex-start", gap: 8 }}
+                    style={{
+                      width: 52,
+                      height: 40,
+                      borderRadius: 6,
+                      flexShrink: 0,
+                      background: "rgba(255,255,255,0.04)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
                   >
-                    {/* Rank badge */}
                     <span
                       style={{
-                        fontSize: 10,
+                        fontSize: 13,
                         fontFamily: "'Space Mono', monospace",
-                        color:
-                          idx === 0 ? "#14F195" : "rgba(255,255,255,0.2)",
+                        color: "rgba(255,255,255,0.15)",
                         fontWeight: 700,
-                        minWidth: 18,
-                        paddingTop: 2,
                       }}
                     >
                       {String(idx + 1).padStart(2, "0")}
                     </span>
-                    <div>
-                      {/* Title */}
-                      <div
+                  </div>
+                )}
+
+                {/* Text content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: 13.5,
+                      fontWeight: idx === 0 ? 600 : 500,
+                      color:
+                        idx === 0
+                          ? "rgba(255,255,255,0.92)"
+                          : "rgba(255,255,255,0.75)",
+                      fontFamily: "'DM Sans', sans-serif",
+                      lineHeight: 1.4,
+                      marginBottom: 4,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {isNew && (
+                      <span
                         style={{
-                          fontSize: 14,
-                          fontWeight: idx === 0 ? 600 : 500,
-                          color:
-                            idx === 0
-                              ? "rgba(255,255,255,0.92)"
-                              : "rgba(255,255,255,0.75)",
-                          fontFamily: "'DM Sans', sans-serif",
-                          lineHeight: 1.4,
-                          marginBottom: 4,
+                          display: "inline-block",
+                          background: "#14F195",
+                          color: "#06091a",
+                          fontSize: 9,
+                          fontFamily: "'Space Mono', monospace",
+                          fontWeight: 700,
+                          padding: "1px 5px",
+                          borderRadius: 3,
+                          marginRight: 6,
+                          verticalAlign: "middle",
                         }}
                       >
-                        {item.title}
-                      </div>
-                      {/* Body excerpt for top 3 */}
-                      {item.body && idx < 3 && (
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: "rgba(255,255,255,0.35)",
-                            fontFamily: "'DM Sans', sans-serif",
-                            lineHeight: 1.4,
-                            marginBottom: 4,
-                          }}
-                        >
-                          {item.body}
-                        </div>
-                      )}
-                      {/* Meta row */}
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
-                      >
-                        <Clock size={10} color="rgba(255,255,255,0.25)" />
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: "rgba(255,255,255,0.3)",
-                            fontFamily: "'Space Mono', monospace",
-                          }}
-                        >
-                          {timeAgo(item.publishedOn)}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: 10,
-                            color: "rgba(20,241,149,0.5)",
-                            fontFamily: "'Space Mono', monospace",
-                          }}
-                        >
-                          {item.source}
-                        </span>
-                      </div>
-                    </div>
+                        NEW
+                      </span>
+                    )}
+                    {item.title}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <Clock size={10} color="rgba(255,255,255,0.2)" />
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: "rgba(255,255,255,0.3)",
+                        fontFamily: "'Space Mono', monospace",
+                      }}
+                    >
+                      {timeAgo(item.pubDate)}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: "rgba(20,241,149,0.45)",
+                        fontFamily: "'Space Mono', monospace",
+                      }}
+                    >
+                      watcher.guru
+                    </span>
                   </div>
                 </div>
+
                 <ExternalLink
                   size={13}
-                  color="rgba(255,255,255,0.2)"
-                  style={{ flexShrink: 0, marginTop: 3 }}
+                  color="rgba(255,255,255,0.18)"
+                  style={{ flexShrink: 0, marginTop: 4 }}
                 />
-              </div>
-            </a>
-          ))}
+              </a>
+            );
+          })}
         </div>
       )}
 
@@ -400,7 +425,7 @@ export default function NewsFeed() {
               fontFamily: "'Space Mono', monospace",
             }}
           >
-            Fetched {lastFetched.toLocaleTimeString()}
+            Updated {lastFetched.toLocaleTimeString()}
           </span>
           <span
             style={{
@@ -409,7 +434,7 @@ export default function NewsFeed() {
               fontFamily: "'DM Sans', sans-serif",
             }}
           >
-            Click headline to read full article
+            New articles replace old ones automatically
           </span>
         </div>
       )}
