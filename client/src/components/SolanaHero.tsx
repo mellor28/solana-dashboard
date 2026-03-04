@@ -171,25 +171,17 @@ export default function SolanaHero({ solana, loading, priceChange7d, priceChange
           {/* SOL price block */}
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div
+              <img
+                src="https://coin-images.coingecko.com/coins/images/4128/large/solana.png?1718769756"
+                alt="Solana"
                 style={{
-                  background: "linear-gradient(135deg, #9945FF, #14F195)",
+                  width: 40, height: 40,
                   borderRadius: "50%",
-                  width: 40,
-                  height: 40,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
                   boxShadow: "0 0 20px rgba(20,241,149,0.4)",
                   flexShrink: 0,
+                  objectFit: "cover",
                 }}
-              >
-                <svg width="22" height="18" viewBox="0 0 20 16" fill="none">
-                  <path d="M2 12.5H14.5L18 9.5H5.5L2 12.5Z" fill="white" fillOpacity="0.9"/>
-                  <path d="M2 6.5H14.5L18 3.5H5.5L2 6.5Z" fill="white" fillOpacity="0.9"/>
-                  <path d="M5.5 9.5H18L14.5 6.5H2L5.5 9.5Z" fill="white" fillOpacity="0.7"/>
-                </svg>
-              </div>
+              />
               <div>
                 <span
                   style={{
@@ -289,18 +281,17 @@ export default function SolanaHero({ solana, loading, priceChange7d, priceChange
           <div>
             <div className="flex items-center gap-3 mb-2">
               {/* JUP logo */}
-              <div style={{
-                background: "linear-gradient(135deg, #C7B8FF, #9945FF)",
-                borderRadius: "50%",
-                width: 40, height: 40,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 0 20px rgba(153,69,255,0.4)",
-                flexShrink: 0,
-                fontSize: 18, fontWeight: 700, color: "white",
-                fontFamily: "'DM Sans', sans-serif",
-              }}>
-                J
-              </div>
+              <img
+                src="https://coin-images.coingecko.com/coins/images/34188/large/jup.png?1704266489"
+                alt="Jupiter"
+                style={{
+                  width: 40, height: 40,
+                  borderRadius: "50%",
+                  boxShadow: "0 0 20px rgba(153,69,255,0.4)",
+                  flexShrink: 0,
+                  objectFit: "cover",
+                }}
+              />
               <div>
                 <span style={{ fontSize: 22, fontWeight: 700, color: "white", fontFamily: "'DM Sans', sans-serif" }}>
                   Jupiter
