@@ -23,6 +23,7 @@ const NAV_ITEMS = [
   { label: "Stables", href: "#stablecoins" },
   { label: "Bridges", href: "#bridge-flows" },
   { label: "Chains", href: "#chain-comparison" },
+  { label: "X-Chain", href: "#cross-chain" },
   { label: "Meteora", href: "#meteora" },
   { label: "Staking", href: "#staking" },
 ];
