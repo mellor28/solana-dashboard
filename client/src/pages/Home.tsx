@@ -25,11 +25,9 @@ import PortfolioNetWorth from "@/components/PortfolioNetWorth";
 import NetworkHealth from "@/components/NetworkHealth";
 import SolanaDeFiEcosystem from "@/components/SolanaDeFiEcosystem";
 import SolanaStakingOverview from "@/components/SolanaStakingOverview";
-import MeteoraStats from "@/components/MeteoraStats";
 import StablecoinTracker from "@/components/StablecoinTracker";
 import BridgeFlowMonitor from "@/components/BridgeFlowMonitor";
 import ChainTVLComparison from "@/components/ChainTVLComparison";
-import CrossChainFlows from "@/components/CrossChainFlows";
 import EpochBanner from "@/components/EpochBanner";
 import { useMarinadeApy } from "@/hooks/useMarinadeApy";
 import { AlertCircle } from "lucide-react";
@@ -297,14 +295,6 @@ export default function Home() {
 
           {/* ── CHAIN TVL COMPARISON ── */}
           <ChainTVLComparison />
-
-          {/* ── CROSS-CHAIN FLOWS ── */}
-          <CrossChainFlows />
-
-          {/* ── METEORA DLMM POOLS ── */}
-          <section id="meteora" style={{ marginBottom: 0 }}>
-            <MeteoraStats />
-          </section>
 
           {/* ── NETWORK STAKING OVERVIEW ── */}
           <SolanaStakingOverview />
