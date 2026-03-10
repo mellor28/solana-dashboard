@@ -29,6 +29,7 @@ import StablecoinTracker from "@/components/StablecoinTracker";
 import BridgeFlowMonitor from "@/components/BridgeFlowMonitor";
 import ChainTVLComparison from "@/components/ChainTVLComparison";
 import EpochBanner from "@/components/EpochBanner";
+import AnalyticsFooter from "@/components/AnalyticsFooter";
 import { useMarinadeApy } from "@/hooks/useMarinadeApy";
 import { AlertCircle } from "lucide-react";
 
@@ -344,6 +345,9 @@ export default function Home() {
             </div>
           </div>
         </main>
+
+        {/* Analytics Footer */}
+        <AnalyticsFooter />
       </div>
     </div>
   );
