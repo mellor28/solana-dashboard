@@ -20,7 +20,8 @@ import { Activity, Cpu, Server, Zap, RefreshCw, CheckCircle, AlertTriangle, XCir
 
 // publicnode has CORS wildcard (*) and supports getRecentPerformanceSamples
 const PUBLICNODE_URL = "https://solana-rpc.publicnode.com";
-const HELIUS_URL = `https://mainnet.helius-rpc.com/?api-key=d34a711e-1e25-489a-8652-2d8709d22b4c`;
+// Using publicnode for all RPC calls — no API key required
+const HELIUS_URL = PUBLICNODE_URL;
 const STATUSPAGE_URL = "https://status.solana.com/api/v2";
 
 interface NetworkData {

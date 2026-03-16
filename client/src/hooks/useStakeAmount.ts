@@ -31,8 +31,8 @@ const BASE_EPOCH_KEY = "sol_stake_base_epoch";    // epoch number at last sync
 const DEFAULT_STAKE = 100.22;
 const EPOCHS_PER_YEAR = 365.25 / 2.5; // ≈ 146.1 epochs/year
 
-const HELIUS_KEY = "d34a711e-1e25-489a-8652-2d8709d22b4c";
-const HELIUS_RPC = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}`;
+// Public Solana RPC — no API key required
+const HELIUS_RPC = "https://solana-rpc.publicnode.com";
 
 function loadNum(key: string, fallback: number): number {
   try {
