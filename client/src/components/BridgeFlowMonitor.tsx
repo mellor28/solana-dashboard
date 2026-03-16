@@ -28,6 +28,7 @@ import {
 import { ArrowDownLeft, ArrowUpRight, RefreshCw, Activity } from "lucide-react";
 
 const REFRESH_MS = 15 * 60_000;
+const CACHE_KEY = "solana_bridge_data_cache";
 
 interface DayFlow {
   date: string;
@@ -48,7 +49,7 @@ interface BridgeData {
   weeklyNet: number;
   chart: DayFlow[];
   topBridges: BridgeEntry[];
-  fetchedAt: Date;
+  fetchedAt: string;
 }
 
 function fmt(n: number, decimals = 0): string {
@@ -59,44 +60,59 @@ function fmt(n: number, decimals = 0): string {
   return `$${n.toFixed(0)}`;
 }
 
-async function fetchWithRetry(url: string, retries = 3, delayMs = 2000): Promise<any> {
+async function fetchWithRetry(url: string, retries = 4, delayMs = 3000): Promise<any> {
   for (let i = 0; i < retries; i++) {
     try {
       const res = await fetch(url);
       if (res.status === 429) {
-        if (i < retries - 1) await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+        // Exponential backoff
+        await new Promise((r) => setTimeout(r, delayMs * Math.pow(2, i)));
         continue;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+      const data = await res.json();
+      if (!data) throw new Error("Empty response");
+      return data;
     } catch (e) {
       if (i === retries - 1) throw e;
-      await new Promise(r => setTimeout(r, delayMs));
+      await new Promise((r) => setTimeout(r, delayMs));
     }
   }
 }
 
 async function loadBridgeData(): Promise<BridgeData> {
-  // Fetch both in parallel with retry
-  const [volumeData, bridgesData] = await Promise.all([
-    fetchWithRetry("https://bridges.llama.fi/bridgevolume/Solana"),
-    fetchWithRetry("https://bridges.llama.fi/bridges?includeChains=true"),
-  ]);
+  // Try to load volume data
+  let volumeData: any[] = [];
+  try {
+    volumeData = await fetchWithRetry("https://bridges.llama.fi/bridgevolume/Solana");
+  } catch (e) {
+    console.error("Volume API failed", e);
+  }
+
+  // Try to load bridges list
+  let bridgesData: any = null;
+  try {
+    bridgesData = await fetchWithRetry("https://bridges.llama.fi/bridges?includeChains=true");
+  } catch (e) {
+    console.error("Bridges API failed", e);
+  }
+
+  if ((!volumeData || !volumeData.length) && !bridgesData) {
+    throw new Error("Both bridge APIs failed");
+  }
 
   // Process daily volume chart (last 7 days)
-  const now = Date.now() / 1000;
-  const sevenDaysAgo = now - 7 * 86400;
-  const chart: DayFlow[] = (volumeData as any[])
-    .filter((p: any) => parseInt(p.date) >= sevenDaysAgo)
-    .map((p: any) => {
-      const ts = parseInt(p.date) * 1000;
-      const d = new Date(ts);
-      const label = `${d.getMonth() + 1}/${d.getDate()}`;
-      const inflow = parseFloat(p.depositUSD || 0);
-      const outflow = parseFloat(p.withdrawUSD || 0);
-      const net = inflow - outflow;
-      return { date: label, inflow, outflow, net };
-    });
+  const chart: DayFlow[] = Array.isArray(volumeData)
+    ? volumeData.slice(-7).map((p: any) => {
+        const ts = parseInt(p.date) * 1000;
+        const d = new Date(ts);
+        const label = `${d.getMonth() + 1}/${d.getDate()}`;
+        const inflow = parseFloat(p.depositUSD || 0);
+        const outflow = parseFloat(p.withdrawUSD || 0);
+        const net = inflow - outflow;
+        return { date: label, inflow, outflow, net };
+      })
+    : [];
 
   const today = chart[chart.length - 1] ?? { inflow: 0, outflow: 0, net: 0 };
   const weeklyNet = chart.reduce((s, d) => s + d.net, 0);
@@ -112,15 +128,19 @@ async function loadBridgeData(): Promise<BridgeData> {
     .sort((a, b) => b.volume24h - a.volume24h)
     .slice(0, 6);
 
-  return {
+  const result = {
     todayNet: today.net,
     todayIn: today.inflow,
     todayOut: today.outflow,
     weeklyNet,
     chart,
     topBridges: solBridges,
-    fetchedAt: new Date(),
+    fetchedAt: new Date().toISOString(),
   };
+
+  // Save to cache
+  localStorage.setItem(CACHE_KEY, JSON.stringify(result));
+  return result;
 }
 
 function ChartTooltip({ active, payload, label }: any) {
@@ -155,8 +175,16 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 export default function BridgeFlowMonitor() {
-  const [data, setData] = useState<BridgeData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<BridgeData | null>(() => {
+    // Initialize from cache
+    const cached = localStorage.getItem(CACHE_KEY);
+    try {
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState(!localStorage.getItem(CACHE_KEY));
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -167,7 +195,13 @@ export default function BridgeFlowMonitor() {
       setData(d);
       setError(null);
     } catch (e: any) {
-      setError("Bridge data temporarily unavailable (rate limited). Will retry.");
+      // If we have cached data, just show a warning instead of full error
+      if (localStorage.getItem(CACHE_KEY)) {
+        console.warn("Bridge API failed, using cached data", e);
+        setError("Bridge data temporarily unavailable (using cached data).");
+      } else {
+        setError("Bridge data temporarily unavailable. Will retry shortly.");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
