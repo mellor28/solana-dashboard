@@ -1,17 +1,8 @@
 /**
- * BridgeFlowMonitor — Capital flows into/out of Solana via bridges
+ * BridgeFlowMonitor — Capital flows into/out of Solana via Wormhole
  * Design: Glassmorphic Space Dashboard
- *
- * Data sources (CORS-open):
- *  - DeFiLlama bridges.llama.fi/bridgevolume/Solana — daily in/out/net
- *  - DeFiLlama bridges.llama.fi/bridges — per-bridge breakdown
- *
- * Shows:
- *  - Net flow today (positive = capital entering Solana)
- *  - 7-day bar chart of inflows vs outflows
- *  - Top bridges by 24h volume
- *
- * Refreshes every 15 minutes (data updates ~daily).
+ * 
+ * Source: api.wormholescan.io (Free, CORS-open)
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -22,35 +13,48 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine,
   Cell,
 } from "recharts";
 import { ArrowDownLeft, ArrowUpRight, RefreshCw, Activity } from "lucide-react";
 
 const REFRESH_MS = 15 * 60_000;
-const CACHE_KEY = "solana_bridge_data_cache";
+const CACHE_KEY = "solana_wormhole_flow_cache";
 
-interface DayFlow {
-  date: string;
+interface ChainFlow {
+  name: string;
   inflow: number;
   outflow: number;
   net: number;
-}
-
-interface BridgeEntry {
-  name: string;
-  volume24h: number;
 }
 
 interface BridgeData {
   todayNet: number;
   todayIn: number;
   todayOut: number;
-  weeklyNet: number;
-  chart: DayFlow[];
-  topBridges: BridgeEntry[];
+  chart: ChainFlow[];
   fetchedAt: string;
 }
+
+const CHAIN_NAMES: Record<number, string> = {
+  1: "Solana",
+  2: "Ethereum",
+  4: "BSC",
+  5: "Polygon",
+  6: "Avalanche",
+  10: "Fantom",
+  16: "Moonbeam",
+  21: "Sui",
+  22: "Aptos",
+  23: "Arbitrum",
+  24: "Optimism",
+  30: "Base",
+  32: "Sei",
+  34: "Scroll",
+  36: "Blast",
+  40: "Mantle",
+  48: "Linea",
+  50: "Berachain",
+};
 
 function fmt(n: number, decimals = 0): string {
   const abs = Math.abs(n);
@@ -60,85 +64,58 @@ function fmt(n: number, decimals = 0): string {
   return `$${n.toFixed(0)}`;
 }
 
-async function fetchWithRetry(url: string, retries = 4, delayMs = 3000): Promise<any> {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const res = await fetch(url);
-      if (res.status === 429) {
-        // Exponential backoff
-        await new Promise((r) => setTimeout(r, delayMs * Math.pow(2, i)));
-        continue;
+async function loadWormholeData(): Promise<BridgeData> {
+  const res = await fetch("https://api.wormholescan.io/api/v1/x-chain-activity");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  const txs: any[] = data.txs ?? [];
+
+  // Outflows from Solana (Chain ID 1)
+  const solOut = txs.find((t: any) => t.chain === 1);
+  const outflowsByChain: Record<number, number> = {};
+  solOut?.destinations.forEach((d: any) => {
+    if (d.chain !== 1) outflowsByChain[d.chain] = parseFloat(d.volume || 0);
+  });
+
+  // Inflows to Solana (Chain ID 1)
+  const inflowsByChain: Record<number, number> = {};
+  txs.forEach((t: any) => {
+    if (t.chain === 1) return;
+    t.destinations.forEach((d: any) => {
+      if (d.chain === 1) {
+        inflowsByChain[t.chain] = (inflowsByChain[t.chain] ?? 0) + parseFloat(d.volume || 0);
       }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (!data) throw new Error("Empty response");
-      return data;
-    } catch (e) {
-      if (i === retries - 1) throw e;
-      await new Promise((r) => setTimeout(r, delayMs));
-    }
-  }
-}
+    });
+  });
 
-async function loadBridgeData(): Promise<BridgeData> {
-  // Try to load volume data
-  let volumeData: any[] = [];
-  try {
-    volumeData = await fetchWithRetry("https://bridges.llama.fi/bridgevolume/Solana");
-  } catch (e) {
-    console.error("Volume API failed", e);
-  }
-
-  // Try to load bridges list
-  let bridgesData: any = null;
-  try {
-    bridgesData = await fetchWithRetry("https://bridges.llama.fi/bridges?includeChains=true");
-  } catch (e) {
-    console.error("Bridges API failed", e);
-  }
-
-  if ((!volumeData || !volumeData.length) && !bridgesData) {
-    throw new Error("Both bridge APIs failed");
-  }
-
-  // Process daily volume chart (last 7 days)
-  const chart: DayFlow[] = Array.isArray(volumeData)
-    ? volumeData.slice(-7).map((p: any) => {
-        const ts = parseInt(p.date) * 1000;
-        const d = new Date(ts);
-        const label = `${d.getMonth() + 1}/${d.getDate()}`;
-        const inflow = parseFloat(p.depositUSD || 0);
-        const outflow = parseFloat(p.withdrawUSD || 0);
-        const net = inflow - outflow;
-        return { date: label, inflow, outflow, net };
-      })
-    : [];
-
-  const today = chart[chart.length - 1] ?? { inflow: 0, outflow: 0, net: 0 };
-  const weeklyNet = chart.reduce((s, d) => s + d.net, 0);
-
-  // Top bridges to Solana
-  const allBridges: any[] = bridgesData?.bridges ?? [];
-  const solBridges = allBridges
-    .filter((b: any) => (b.chains ?? []).includes("Solana"))
-    .map((b: any) => ({
-      name: b.displayName as string,
-      volume24h: parseFloat(b.lastDailyVolume ?? 0),
-    }))
-    .sort((a, b) => b.volume24h - a.volume24h)
+  // Aggregate by chain for the chart
+  const allChainIds = new Set([...Object.keys(inflowsByChain), ...Object.keys(outflowsByChain)]);
+  const chart: ChainFlow[] = Array.from(allChainIds)
+    .map(id => {
+      const cid = parseInt(id as string);
+      const inflow = inflowsByChain[cid] ?? 0;
+      const outflow = outflowsByChain[cid] ?? 0;
+      return {
+        name: CHAIN_NAMES[cid] ?? `Chain ${cid}`,
+        inflow,
+        outflow,
+        net: inflow - outflow
+      };
+    })
+    .sort((a, b) => (b.inflow + b.outflow) - (a.inflow + a.outflow))
     .slice(0, 6);
 
+  const totalIn = Object.values(inflowsByChain).reduce((a, b) => a + b, 0);
+  const totalOut = Object.values(outflowsByChain).reduce((a, b) => a + b, 0);
+
   const result = {
-    todayNet: today.net,
-    todayIn: today.inflow,
-    todayOut: today.outflow,
-    weeklyNet,
+    todayNet: totalIn - totalOut,
+    todayIn: totalIn,
+    todayOut: totalOut,
     chart,
-    topBridges: solBridges,
     fetchedAt: new Date().toISOString(),
   };
 
-  // Save to cache
   localStorage.setItem(CACHE_KEY, JSON.stringify(result));
   return result;
 }
@@ -156,9 +133,8 @@ function ChartTooltip({ active, payload, label }: any) {
       padding: "8px 12px",
       fontFamily: "'Space Mono', monospace",
       fontSize: 11,
-      minWidth: 140,
     }}>
-      <div style={{ color: "rgba(255,255,255,0.5)", marginBottom: 5 }}>{label}</div>
+      <div style={{ color: "rgba(255,255,255,0.8)", marginBottom: 5, fontWeight: 700 }}>{label}</div>
       <div style={{ color: "#14F195", marginBottom: 2 }}>In: {fmt(inflow)}</div>
       <div style={{ color: "#FF6B6B", marginBottom: 2 }}>Out: {fmt(outflow)}</div>
       <div style={{
@@ -176,13 +152,8 @@ function ChartTooltip({ active, payload, label }: any) {
 
 export default function BridgeFlowMonitor() {
   const [data, setData] = useState<BridgeData | null>(() => {
-    // Initialize from cache
     const cached = localStorage.getItem(CACHE_KEY);
-    try {
-      return cached ? JSON.parse(cached) : null;
-    } catch {
-      return null;
-    }
+    try { return cached ? JSON.parse(cached) : null; } catch { return null; }
   });
   const [loading, setLoading] = useState(!localStorage.getItem(CACHE_KEY));
   const [error, setError] = useState<string | null>(null);
@@ -191,16 +162,14 @@ export default function BridgeFlowMonitor() {
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
     try {
-      const d = await loadBridgeData();
+      const d = await loadWormholeData();
       setData(d);
       setError(null);
     } catch (e: any) {
-      // If we have cached data, just show a warning instead of full error
       if (localStorage.getItem(CACHE_KEY)) {
-        console.warn("Bridge API failed, using cached data", e);
-        setError("Bridge data temporarily unavailable (using cached data).");
+        setError("Wormhole API throttled (using cached data).");
       } else {
-        setError("Bridge data temporarily unavailable. Will retry shortly.");
+        setError("Bridge data temporarily unavailable.");
       }
     } finally {
       setLoading(false);
@@ -215,7 +184,6 @@ export default function BridgeFlowMonitor() {
   }, [load]);
 
   const isNetPositive = (data?.todayNet ?? 0) >= 0;
-  const isWeeklyPositive = (data?.weeklyNet ?? 0) >= 0;
 
   return (
     <section id="bridge-flows" style={{ marginBottom: 32 }}>
@@ -223,7 +191,7 @@ export default function BridgeFlowMonitor() {
       <div className="flex items-center gap-3 mb-5">
         <div style={{
           width: 4, height: 28,
-          background: "linear-gradient(180deg, #14F195, #00C2FF)",
+          background: "linear-gradient(180deg, #9945FF, #14F195)",
           borderRadius: 2,
         }} />
         <div style={{ flex: 1 }}>
@@ -233,286 +201,168 @@ export default function BridgeFlowMonitor() {
             fontFamily: "'DM Sans', sans-serif",
             lineHeight: 1.2,
           }}>
-            Bridge Flow Monitor
+            Wormhole Bridge Activity
           </h2>
           <div style={{
-            fontSize: 12, color: "rgba(255,255,255,0.4)",
-            fontFamily: "'Space Mono', monospace",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginTop: 4,
           }}>
-            LIVE · DEFILLAMA · CAPITAL FLOWS INTO SOLANA · REFRESHES 15m
+            <span style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.05em",
+              color: "#14F195",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#14F195", boxShadow: "0 0 8px #14F195" }} />
+              LIVE · WORMHOLE SCAN · FLOWS · REFRESHES 15m
+            </span>
           </div>
         </div>
+
         <button
           onClick={() => load(true)}
           disabled={refreshing}
+          className="glass-card hover:bg-white/10 transition-colors"
           style={{
-            background: "rgba(255,255,255,0.06)",
+            padding: "8px 12px",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 12,
+            color: "rgba(255,255,255,0.7)",
             border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 8, padding: "6px 12px",
-            cursor: refreshing ? "not-allowed" : "pointer",
-            display: "flex", alignItems: "center", gap: 5,
-            color: "rgba(255,255,255,0.6)", fontSize: 12,
-            fontFamily: "'DM Sans', sans-serif",
-            opacity: refreshing ? 0.6 : 1,
+            cursor: "pointer",
+            background: "rgba(255,255,255,0.06)",
+            borderRadius: 8,
           }}
         >
-          <RefreshCw size={13} style={{ animation: refreshing ? "spin 1s linear infinite" : "none" }} />
+          <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
           Refresh
         </button>
       </div>
 
-      {loading ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {[80, 200, 100].map((h, i) => (
-            <div key={i} style={{
-              height: h,
-              background: "rgba(255,255,255,0.04)",
-              borderRadius: 12,
-              animation: "pulse 1.5s ease-in-out infinite",
-              animationDelay: `${i * 100}ms`,
-            }} />
-          ))}
-        </div>
-      ) : error ? (
-        <div className="glass-card" style={{
-          padding: "20px 24px",
-          display: "flex", alignItems: "center", gap: 12,
-        }}>
-          <Activity size={18} color="rgba(255,165,0,0.7)" />
-          <div>
-            <div style={{ color: "rgba(255,165,0,0.9)", fontFamily: "'DM Sans', sans-serif", fontSize: 14, fontWeight: 600 }}>
-              Bridge data temporarily unavailable
-            </div>
-            <div style={{ color: "rgba(255,255,255,0.35)", fontFamily: "'DM Sans', sans-serif", fontSize: 12, marginTop: 3 }}>
-              DeFiLlama bridges API is rate-limited. Data will load on next refresh.
+      <div
+        className="glass-card"
+        style={{
+          padding: 24,
+          minHeight: 340,
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {loading && !data ? (
+          <div className="flex flex-col items-center justify-center h-full" style={{ minHeight: 280 }}>
+            <Activity className="animate-pulse text-solana-green mb-4" size={40} />
+            <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, fontFamily: "'Space Mono', monospace" }}>
+              COLLECTING BRIDGE DATA...
             </div>
           </div>
-        </div>
-      ) : data ? (
-        <>
-          {/* Summary stat cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
-            {/* Today net */}
-            <div className="glass-card" style={{
-              padding: "18px 20px",
-              background: isNetPositive
-                ? "linear-gradient(135deg, rgba(20,241,149,0.07) 0%, rgba(0,194,255,0.04) 100%)"
-                : "linear-gradient(135deg, rgba(255,107,107,0.07) 0%, rgba(255,60,60,0.04) 100%)",
-              borderColor: isNetPositive ? "rgba(20,241,149,0.2)" : "rgba(255,107,107,0.2)",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                {isNetPositive
-                  ? <ArrowDownLeft size={14} color="#14F195" />
-                  : <ArrowUpRight size={14} color="#FF6B6B" />}
-                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace" }}>
-                  TODAY NET FLOW
-                </span>
-              </div>
-              <div style={{
-                fontSize: 26, fontFamily: "'Space Mono', monospace", fontWeight: 700,
-                color: isNetPositive ? "#14F195" : "#FF6B6B",
-                lineHeight: 1.1,
-              }}>
-                {isNetPositive ? "+" : ""}{fmt(data.todayNet)}
-              </div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "'DM Sans', sans-serif", marginTop: 4 }}>
-                {isNetPositive ? "Net capital inflow" : "Net capital outflow"}
-              </div>
+        ) : error && !data ? (
+          <div className="flex flex-col items-center justify-center h-full" style={{ minHeight: 280 }}>
+            <div style={{ color: "#FF6B6B", fontSize: 14, fontFamily: "'DM Sans', sans-serif", marginBottom: 8 }}>
+              {error}
             </div>
-
-            {/* Today inflow */}
-            <div className="glass-card" style={{ padding: "18px 20px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                <ArrowDownLeft size={14} color="#14F195" />
-                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace" }}>
-                  TODAY INFLOW
-                </span>
-              </div>
-              <div style={{
-                fontSize: 22, fontFamily: "'Space Mono', monospace", fontWeight: 700,
-                color: "rgba(255,255,255,0.9)", lineHeight: 1.1,
-              }}>
-                {fmt(data.todayIn)}
-              </div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "'DM Sans', sans-serif", marginTop: 4 }}>
-                Bridged into Solana
-              </div>
-            </div>
-
-            {/* 7-day net */}
-            <div className="glass-card" style={{
-              padding: "18px 20px",
-              background: isWeeklyPositive
-                ? "linear-gradient(135deg, rgba(20,241,149,0.05) 0%, transparent 100%)"
-                : "linear-gradient(135deg, rgba(255,107,107,0.05) 0%, transparent 100%)",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                <Activity size={14} color="rgba(255,255,255,0.5)" />
-                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace" }}>
-                  7-DAY NET
-                </span>
-              </div>
-              <div style={{
-                fontSize: 22, fontFamily: "'Space Mono', monospace", fontWeight: 700,
-                color: isWeeklyPositive ? "#14F195" : "#FF6B6B", lineHeight: 1.1,
-              }}>
-                {isWeeklyPositive ? "+" : ""}{fmt(data.weeklyNet)}
-              </div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "'DM Sans', sans-serif", marginTop: 4 }}>
-                Weekly capital balance
-              </div>
-            </div>
+            <button
+              onClick={() => load(true)}
+              style={{ fontSize: 12, color: "#14F195", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
+            >
+              Try again
+            </button>
           </div>
-
-          {/* Chart + Bridge leaderboard */}
-          <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 16 }} className="flex-col-on-mobile">
-            {/* 7-day bar chart */}
-            <div className="glass-card" style={{ padding: "20px 22px" }}>
-              <div style={{ marginBottom: 14 }}>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: 32 }} className="flex-col-on-mobile">
+            {/* Left side: Stats */}
+            <div>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace", marginBottom: 8 }}>
+                  SOLANA NET FLOW (24H)
+                </div>
                 <div style={{
-                  fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.9)",
-                  fontFamily: "'DM Sans', sans-serif", marginBottom: 2,
+                  fontSize: 36,
+                  fontWeight: 800,
+                  fontFamily: "'Space Mono', monospace",
+                  color: isNetPositive ? "#14F195" : "#FF6B6B",
+                  letterSpacing: "-0.02em",
                 }}>
-                  7-Day Inflow vs Outflow
-                </div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "'Space Mono', monospace" }}>
-                  DAILY BRIDGE VOLUME TO SOLANA
+                  {isNetPositive ? "+" : ""}{fmt(data?.todayNet ?? 0, 1)}
                 </div>
               </div>
 
-              {data.chart.length > 0 ? (
-                <>
-                  <ResponsiveContainer width="100%" height={180}>
-                    <BarChart data={data.chart} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barGap={2}>
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10, fontFamily: "'Space Mono', monospace" }}
-                        tickLine={false} axisLine={false}
-                      />
-                      <YAxis
-                        tickFormatter={(v) => `$${(v / 1e6).toFixed(0)}M`}
-                        tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10, fontFamily: "'Space Mono', monospace" }}
-                        tickLine={false} axisLine={false} width={50}
-                      />
-                      <Tooltip content={<ChartTooltip />} />
-                      <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" />
-                      <Bar dataKey="inflow" name="Inflow" radius={[3, 3, 0, 0]} maxBarSize={28}>
-                        {data.chart.map((_, i) => (
-                          <Cell key={i} fill="rgba(20,241,149,0.5)" />
-                        ))}
-                      </Bar>
-                      <Bar dataKey="outflow" name="Outflow" radius={[3, 3, 0, 0]} maxBarSize={28}>
-                        {data.chart.map((_, i) => (
-                          <Cell key={i} fill="rgba(255,107,107,0.5)" />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-
-                  {/* Legend */}
-                  <div style={{ display: "flex", gap: 16, marginTop: 8, justifyContent: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 2, background: "rgba(20,241,149,0.5)" }} />
-                      <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "'DM Sans', sans-serif" }}>Inflow</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 2, background: "rgba(255,107,107,0.5)" }} />
-                      <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "'DM Sans', sans-serif" }}>Outflow</span>
-                    </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div className="glass-card" style={{ padding: "12px 16px", background: "rgba(20,241,149,0.03)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Inflows</span>
+                    <ArrowDownLeft size={16} color="#14F195" />
                   </div>
-                </>
-              ) : (
-                <div style={{
-                  height: 180, display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "rgba(255,255,255,0.3)", fontFamily: "'DM Sans', sans-serif", fontSize: 13,
-                }}>
-                  No chart data available
+                  <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Space Mono', monospace", color: "white" }}>
+                    {fmt(data?.todayIn ?? 0, 1)}
+                  </div>
                 </div>
-              )}
+
+                <div className="glass-card" style={{ padding: "12px 16px", background: "rgba(255,107,107,0.03)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Outflows</span>
+                    <ArrowUpRight size={16} color="#FF6B6B" />
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Space Mono', monospace", color: "white" }}>
+                    {fmt(data?.todayOut ?? 0, 1)}
+                  </div>
+                </div>
+
+                {error && (
+                  <div style={{ fontSize: 10, color: "rgba(255,184,0,0.6)", marginTop: 8, fontStyle: "italic" }}>
+                    * {error}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Bridge leaderboard */}
-            <div className="glass-card" style={{ padding: "20px 22px" }}>
-              <div style={{ marginBottom: 14 }}>
-                <div style={{
-                  fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.9)",
-                  fontFamily: "'DM Sans', sans-serif", marginBottom: 2,
-                }}>
-                  Top Bridges to Solana
+            {/* Right side: Chart */}
+            <div style={{ height: 300 }}>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace", marginBottom: 12, textAlign: "right" }}>
+                VOLUME BY SOURCE CHAIN
+              </div>
+              <ResponsiveContainer width="100%" height="90%">
+                <BarChart data={data?.chart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={2}>
+                  <XAxis
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 10 }}
+                  />
+                  <YAxis hide domain={[0, "auto"]} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                  <Bar dataKey="inflow" radius={[4, 4, 0, 0]} barSize={20}>
+                    {data?.chart.map((entry, index) => (
+                      <Cell key={`cell-in-${index}`} fill="#14F195" fillOpacity={0.8} />
+                    ))}
+                  </Bar>
+                  <Bar dataKey="outflow" radius={[4, 4, 0, 0]} barSize={20}>
+                    {data?.chart.map((entry, index) => (
+                      <Cell key={`cell-out-${index}`} fill="#FF6B6B" fillOpacity={0.8} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div style={{ display: "flex", gap: 16, justifyContent: "flex-end", marginTop: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 2, background: "#14F195" }} />
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Inflow</span>
                 </div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "'Space Mono', monospace" }}>
-                  BY 24H VOLUME
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 2, background: "#FF6B6B" }} />
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Outflow</span>
                 </div>
               </div>
-
-              {data.topBridges.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                  {data.topBridges.map((bridge, i) => {
-                    const maxVol = data.topBridges[0]?.volume24h ?? 1;
-                    const pct = (bridge.volume24h / maxVol) * 100;
-                    const bridgeColors = ["#00C2FF", "#14F195", "#9945FF", "#FFB800", "#FF6B6B", "#A8FF78"];
-                    const color = bridgeColors[i % bridgeColors.length];
-                    return (
-                      <div key={bridge.name} style={{
-                        padding: "8px 0",
-                        borderBottom: i < data.topBridges.length - 1
-                          ? "1px solid rgba(255,255,255,0.04)" : "none",
-                      }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{
-                              fontSize: 11, color: "rgba(255,255,255,0.25)",
-                              fontFamily: "'Space Mono', monospace", width: 14,
-                            }}>
-                              {i + 1}
-                            </span>
-                            <span style={{
-                              fontSize: 13, color: "rgba(255,255,255,0.85)",
-                              fontFamily: "'DM Sans', sans-serif", fontWeight: 500,
-                            }}>
-                              {bridge.name}
-                            </span>
-                          </div>
-                          <span style={{
-                            fontSize: 12, fontFamily: "'Space Mono', monospace",
-                            fontWeight: 700, color: "rgba(255,255,255,0.85)",
-                          }}>
-                            {fmt(bridge.volume24h)}
-                          </span>
-                        </div>
-                        <div style={{
-                          height: 2, background: "rgba(255,255,255,0.05)",
-                          borderRadius: 1, overflow: "hidden",
-                        }}>
-                          <div style={{
-                            height: "100%", width: `${pct}%`,
-                            background: color, opacity: 0.6,
-                            borderRadius: 1, transition: "width 0.8s ease",
-                          }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={{
-                  color: "rgba(255,255,255,0.3)", fontFamily: "'DM Sans', sans-serif",
-                  fontSize: 13, textAlign: "center", paddingTop: 20,
-                }}>
-                  No bridge data available
-                </div>
-              )}
             </div>
           </div>
-
-          <div style={{
-            marginTop: 8, fontSize: 11, color: "rgba(255,255,255,0.2)",
-            fontFamily: "'Space Mono', monospace", textAlign: "right",
-          }}>
-            Source: DeFiLlama Bridges · Updated {data.fetchedAt.toLocaleTimeString()}
-          </div>
-        </>
-      ) : null}
+        )}
+      </div>
     </section>
   );
 }
