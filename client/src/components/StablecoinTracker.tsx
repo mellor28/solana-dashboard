@@ -25,6 +25,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { DollarSign, TrendingUp, TrendingDown, RefreshCw } from "lucide-react";
+import { formatTime } from "@/lib/utils";
 
 const REFRESH_MS = 10 * 60_000;
 
@@ -745,7 +746,7 @@ export default function StablecoinTracker() {
               textAlign: "right",
             }}
           >
-            Source: DeFiLlama · Updated {data.fetchedAt.toLocaleTimeString()}
+            Source: DeFiLlama · Updated {formatTime(data.fetchedAt)}
           </div>
         </>
       ) : null}

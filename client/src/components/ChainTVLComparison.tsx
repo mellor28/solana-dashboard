@@ -24,6 +24,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { BarChart2, RefreshCw, TrendingUp, TrendingDown } from "lucide-react";
+import { formatTime } from "@/lib/utils";
 
 const REFRESH_MS = 10 * 60_000;
 
@@ -411,7 +412,7 @@ export default function ChainTVLComparison() {
             fontSize: 11, color: "rgba(255,255,255,0.2)",
             fontFamily: "'Space Mono', monospace", textAlign: "right",
           }}>
-            Source: DeFiLlama · Updated {data.fetchedAt.toLocaleTimeString()}
+            Source: DeFiLlama · Updated {formatTime(data.fetchedAt)}
           </div>
         </>
       ) : null}

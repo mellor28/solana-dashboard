@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Clock, RefreshCw } from "lucide-react";
+import { formatTime } from "@/lib/utils";
 
 // Public Solana RPC — no API key required
 const HELIUS_RPC = "https://solana-rpc.publicnode.com";
@@ -283,7 +284,7 @@ export default function EpochCountdown({ compact = false }: Props) {
 
       {lastFetched && (
         <div style={{ marginTop: 8, fontSize: 10, color: "rgba(255,255,255,0.2)", fontFamily: "'DM Sans', sans-serif" }}>
-          Updated {lastFetched.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+          Updated {formatTime(lastFetched)}
         </div>
       )}
     </div>

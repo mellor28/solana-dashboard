@@ -34,6 +34,7 @@ import {
   ArrowDownToLine,
   Clock,
 } from "lucide-react";
+import { formatTime } from "@/lib/utils";
 import EpochCountdown from "@/components/EpochCountdown";
 import { useCountUp } from "@/hooks/useCountUp";
 import { useMarinadeApy } from "@/hooks/useMarinadeApy";
@@ -190,9 +191,9 @@ export default function StakingTracker({ solPrice, stakeAmount, baseStake, origi
 
   const animatedStake = useCountUp(stakeAmount, 1200, 4);
 
-  const formatLastFetched = (d: Date | null) => {
+  const formatLastFetched = (d: Date | string | null) => {
     if (!d) return null;
-    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    return formatTime(d);
   };
 
   return (

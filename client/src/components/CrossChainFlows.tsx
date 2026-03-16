@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { ArrowDownLeft, ArrowUpRight, RefreshCw, GitBranch } from "lucide-react";
+import { formatTime } from "@/lib/utils";
 
 // Wormhole chain ID → display name + colour
 const CHAIN_META: Record<number, { name: string; color: string; logo: string }> = {
@@ -348,7 +349,7 @@ export default function CrossChainFlows() {
               Source: Wormhole Scan API · 7-day rolling window
             </span>
             <span style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", fontFamily: "'Space Mono', monospace" }}>
-              Updated {data.fetchedAt.toLocaleTimeString()}
+              Updated {formatTime(data.fetchedAt)}
             </span>
           </div>
         </>

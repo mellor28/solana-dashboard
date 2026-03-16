@@ -35,8 +35,10 @@ export default function Navbar({ lastUpdated, onRefresh, loading }: NavbarProps)
     setTimeout(() => setSpinning(false), 1500);
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString("en-US", {
+  const formatTime = (date: Date | string | null) => {
+    if (!date) return "--:--:--";
+    const d = typeof date === "string" ? new Date(date) : date;
+    return d.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",

@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Droplets, RefreshCw, TrendingUp } from "lucide-react";
+import { formatTime } from "@/lib/utils";
 
 const REFRESH_MS = 3 * 60_000;
 const API_URL =
@@ -344,7 +345,7 @@ export default function MeteoraStats() {
             textAlign: "right",
           }}
         >
-          Source: Meteora DLMM API · {lastFetched.toLocaleTimeString()}
+          Source: Meteora DLMM API · {formatTime(lastFetched)}
         </div>
       )}
     </div>

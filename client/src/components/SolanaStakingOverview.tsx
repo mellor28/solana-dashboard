@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Shield, Percent, Users, Coins, RefreshCw, Lock, Zap } from "lucide-react";
+import { formatTime } from "@/lib/utils";
 
 const REFRESH_MS = 2 * 60_000;
 const RPC = "https://solana.publicnode.com";
@@ -408,7 +409,7 @@ export default function SolanaStakingOverview() {
               textAlign: "right",
             }}
           >
-            Source: Solana RPC (publicnode) · Jito · Marinade · Updated {data.fetchedAt.toLocaleTimeString()}
+            Source: Solana RPC (publicnode) · Jito · Marinade · Updated {formatTime(data.fetchedAt)}
           </div>
         </>
       ) : null}

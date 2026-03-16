@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { BarChart2, Layers, TrendingUp, TrendingDown, RefreshCw } from "lucide-react";
+import { formatTime } from "@/lib/utils";
 
 const REFRESH_MS = 5 * 60_000;
 
@@ -518,7 +519,7 @@ export default function SolanaDeFiEcosystem() {
             textAlign: "right",
           }}
         >
-          Source: DeFiLlama · Updated {data.fetchedAt.toLocaleTimeString()}
+          Source: DeFiLlama · Updated {formatTime(data.fetchedAt)}
         </div>
       )}
     </section>

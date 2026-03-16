@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Newspaper, ExternalLink, RefreshCw, Clock } from "lucide-react";
+import { formatTime } from "@/lib/utils";
 
 const MAX_ARTICLES = 10;
 const REFRESH_INTERVAL_MS = 5 * 60_000; // 5 minutes
@@ -425,7 +426,7 @@ export default function NewsFeed() {
               fontFamily: "'Space Mono', monospace",
             }}
           >
-            Updated {lastFetched.toLocaleTimeString()}
+            Updated {formatTime(lastFetched)}
           </span>
           <span
             style={{

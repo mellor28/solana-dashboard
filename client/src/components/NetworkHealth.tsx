@@ -17,6 +17,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { Activity, Cpu, Server, Zap, RefreshCw, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { formatTime } from "@/lib/utils";
 
 // publicnode has CORS wildcard (*) and supports getRecentPerformanceSamples
 const PUBLICNODE_URL = "https://solana-rpc.publicnode.com";
@@ -744,7 +745,7 @@ export default function NetworkHealth() {
 
           {/* Last updated */}
           <div style={{ marginTop: 10, fontSize: 11, color: "rgba(255,255,255,0.2)", fontFamily: "'Space Mono', monospace", textAlign: "right" }}>
-            Updated {data.fetchedAt.toLocaleTimeString()}
+            Updated {formatTime(data.fetchedAt)}
           </div>
         </>
       ) : null}
