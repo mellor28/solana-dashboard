@@ -10,7 +10,6 @@
  */
 
 import { useCryptoData } from "@/hooks/useCryptoData";
-import { useStakeAmount } from "@/hooks/useStakeAmount";
 import { useJupBalance } from "@/hooks/useJupBalance";
 import ParticleBackground from "@/components/ParticleBackground";
 import Navbar from "@/components/Navbar";
@@ -18,19 +17,14 @@ import SolanaHero from "@/components/SolanaHero";
 import PriceChart from "@/components/PriceChart";
 import CryptoTable from "@/components/CryptoTable";
 import AdoptionMetrics from "@/components/AdoptionMetrics";
-import StakingTracker from "@/components/StakingTracker";
 import FearGreedWidget from "@/components/FearGreedWidget";
-import JupiterWidget from "@/components/JupiterWidget";
-import PortfolioNetWorth from "@/components/PortfolioNetWorth";
 import NetworkHealth from "@/components/NetworkHealth";
 import SolanaDeFiEcosystem from "@/components/SolanaDeFiEcosystem";
-import SolanaStakingOverview from "@/components/SolanaStakingOverview";
 import StablecoinTracker from "@/components/StablecoinTracker";
 import BridgeFlowMonitor from "@/components/BridgeFlowMonitor";
 import ChainTVLComparison from "@/components/ChainTVLComparison";
 import EpochBanner from "@/components/EpochBanner";
 import AnalyticsFooter from "@/components/AnalyticsFooter";
-import { useMarinadeApy } from "@/hooks/useMarinadeApy";
 import { AlertCircle } from "lucide-react";
 
 export default function Home() {
@@ -48,14 +42,9 @@ export default function Home() {
 
   const priceChange7d = solanaDetail?.market_data?.price_change_percentage_7d;
   const priceChange30d = solanaDetail?.market_data?.price_change_percentage_30d;
-  const { apy30d } = useMarinadeApy();
-  const activeApy = apy30d?.apy ?? 6.10;
-  const { stakeAmount, currentStake, baseStake, originalStake, rewardsAccumulated, epochRewards, epochsElapsed, currentEpoch, lastSynced, setStakeAmount } = useStakeAmount(activeApy);
 
   // JUP balance for portfolio card — reads same localStorage key as JupiterWidget
-  const { jupAmount, jupPrice } = useJupBalance();
-
-  const solPrice = solana?.current_price ?? 0;
+  const { jupPrice } = useJupBalance();
 
   return (
     <div
@@ -134,15 +123,6 @@ export default function Home() {
 
           {/* ── EPOCH BANNER ── */}
           <EpochBanner />
-
-          {/* ── PORTFOLIO NET WORTH ── */}
-          <PortfolioNetWorth
-            solPrice={solPrice}
-            solStaked={currentStake}
-            jupPrice={jupPrice}
-            jupAmount={jupAmount}
-            loading={loading}
-          />
 
           {/* Price Chart + Quick Stats + Fear & Greed */}
           <div
@@ -296,25 +276,6 @@ export default function Home() {
 
           {/* ── CHAIN TVL COMPARISON ── */}
           <ChainTVLComparison />
-
-          {/* ── NETWORK STAKING OVERVIEW ── */}
-          <SolanaStakingOverview />
-
-          {/* Jupiter Staking Widget */}
-          <JupiterWidget />
-
-          {/* Staking Tracker */}
-          <StakingTracker
-            solPrice={solana?.current_price ?? 0}
-            stakeAmount={stakeAmount}
-            baseStake={baseStake}
-            originalStake={originalStake}
-            rewardsAccumulated={rewardsAccumulated}
-            epochRewards={epochRewards}
-            epochsElapsed={epochsElapsed}
-            lastSynced={lastSynced}
-            onStakeAmountChange={setStakeAmount}
-          />
 
           {/* Footer */}
           <div
