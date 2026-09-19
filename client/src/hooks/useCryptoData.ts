@@ -77,6 +77,7 @@ export interface CryptoState {
   loading: boolean;
   error: string | null;
   lastUpdated: Date | null;
+  live: boolean;
 }
 
 const BINANCE_BASE = "https://api.binance.com/api/v3";
@@ -161,23 +162,64 @@ async function fetchWithRetry(url: string, retries = 3, delayMs = 1500): Promise
   throw new Error("Max retries exceeded");
 }
 
-async function fetchCoinGeckoSupplementary(): Promise<Map<string, { market_cap: number; rank: number; circulating_supply: number; ath: number; ath_change: number }>> {
+const CG_CACHE_KEY = "solana-dashboard:cg-markets-v1";
+const CG_CACHE_TTL_MS = 15 * 60 * 1000;
+
+type CgSupplementary = {
+  market_cap: number;
+  rank: number;
+  circulating_supply: number;
+  ath: number;
+  ath_change: number;
+};
+
+function readCgCache(): Map<string, CgSupplementary> | null {
+  try {
+    const raw = localStorage.getItem(CG_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { expires: number; entries: [string, CgSupplementary][] };
+    if (!parsed?.entries || Date.now() > parsed.expires) return null;
+    return new Map(parsed.entries);
+  } catch {
+    return null;
+  }
+}
+
+function writeCgCache(map: Map<string, CgSupplementary>) {
+  try {
+    localStorage.setItem(
+      CG_CACHE_KEY,
+      JSON.stringify({ expires: Date.now() + CG_CACHE_TTL_MS, entries: [...map.entries()] })
+    );
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+async function fetchCoinGeckoSupplementary(): Promise<Map<string, CgSupplementary>> {
+  const cached = readCgCache();
   const ids = COIN_CONFIG.map((c) => c.cgId).join(",");
   const url = `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${ids}&order=market_cap_desc&per_page=10&page=1&sparkline=false`;
-  const res = await fetchWithRetry(url, 3, 2000);
-  if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
-  const data: any[] = await res.json();
-  const map = new Map<string, any>();
-  for (const c of data) {
-    map.set(c.id, {
-      market_cap: c.market_cap ?? 0,
-      rank: c.market_cap_rank ?? 0,
-      circulating_supply: c.circulating_supply ?? 0,
-      ath: c.ath ?? 0,
-      ath_change: c.ath_change_percentage ?? 0,
-    });
+  try {
+    const res = await fetchWithRetry(url, 3, 2000);
+    if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
+    const data: any[] = await res.json();
+    const map = new Map<string, CgSupplementary>();
+    for (const c of data) {
+      map.set(c.id, {
+        market_cap: c.market_cap ?? 0,
+        rank: c.market_cap_rank ?? 0,
+        circulating_supply: c.circulating_supply ?? 0,
+        ath: c.ath ?? 0,
+        ath_change: c.ath_change_percentage ?? 0,
+      });
+    }
+    if (map.size > 0) writeCgCache(map);
+    return map;
+  } catch (err) {
+    if (cached) return cached;
+    throw err;
   }
-  return map;
 }
 
 export function useCryptoData() {
@@ -190,16 +232,22 @@ export function useCryptoData() {
     loading: true,
     error: null,
     lastUpdated: null,
+    live: false,
   });
 
   const fetchAll = useCallback(async () => {
-    setState((prev) => ({ ...prev, loading: true, error: null }));
+    // Only show the full-page loading state on first load — refreshes should not flash skeletons
+    setState((prev) => ({
+      ...prev,
+      loading: prev.solana == null && prev.topCoins.length === 0,
+      error: null,
+    }));
 
     try {
       // Step 1: Fetch Binance data (fast, no rate limits) — this populates prices immediately
       const [binanceTickers, solKlines, sol7dChange, tvlRes, cgDetailRes] = await Promise.allSettled([
         fetchBinanceTickers(),
-        fetchBinanceKlines("SOLUSDT", 31),
+        fetchBinanceKlines("SOLUSDT", 90),
         fetchBinance7dChange("SOLUSDT"),
         fetchWithRetry(`${DEFILLAMA_BASE}/v2/historicalChainTvl/Solana`),
         fetchWithRetry(`${COINGECKO_BASE}/coins/solana?localization=false&tickers=false&community_data=true&developer_data=true&sparkline=false`, 3, 2000),
@@ -211,23 +259,25 @@ export function useCryptoData() {
         tickers = binanceTickers.value;
       }
 
-      // Build coins from Binance data (immediate)
+      // Build coins from Binance data (immediate), seeded with cached CoinGecko stats
+      const cachedCg = readCgCache();
       const coins: CoinData[] = COIN_CONFIG.map((cfg) => {
         const t = tickers.get(cfg.binance);
+        const cg = cachedCg?.get(cfg.id);
         return {
           id: cfg.id,
           symbol: cfg.symbol,
           name: cfg.name,
           current_price: t?.price ?? 0,
-          market_cap: 0, // filled by CoinGecko below
-          market_cap_rank: cfg.rank,
+          market_cap: cg?.market_cap ?? 0,
+          market_cap_rank: cg?.rank ?? cfg.rank,
           price_change_percentage_24h: t?.change24h ?? 0,
           price_change_percentage_7d_in_currency: 0, // filled below
           price_change_percentage_30d_in_currency: 0, // filled below
           total_volume: t?.volume ?? 0,
-          circulating_supply: 0,
-          ath: 0,
-          ath_change_percentage: 0,
+          circulating_supply: cg?.circulating_supply ?? 0,
+          ath: cg?.ath ?? 0,
+          ath_change_percentage: cg?.ath_change ?? 0,
           image: COIN_LOGOS[cfg.id] ?? "",
         };
       });
@@ -255,18 +305,43 @@ export function useCryptoData() {
         solanaDetail = await cgDetailRes.value.json();
       }
 
-      const solCoin = coins.find((c) => c.id === "solana") ?? null;
-
-      // Publish first render with Binance data (fast path)
-      setState({
-        solana: solCoin,
-        topCoins: coins,
-        solanaHistory,
-        solanaTvl,
-        solanaDetail,
-        loading: false,
-        error: null,
-        lastUpdated: new Date(),
+      // Publish first render with Binance data (fast path). Keep websocket `live` flag
+      // and don't wipe CoinGecko fields / live prices on a background refresh.
+      setState((prev) => {
+        const prevById = new Map(prev.topCoins.map((c) => [c.id, c]));
+        const merged = coins.map((c) => {
+          const old = prevById.get(c.id);
+          if (!old) return c;
+          return {
+            ...c,
+            current_price:
+              prev.live && old.current_price > 0 ? old.current_price : c.current_price || old.current_price,
+            price_change_percentage_24h:
+              prev.live ? old.price_change_percentage_24h : c.price_change_percentage_24h,
+            market_cap: c.market_cap || old.market_cap,
+            market_cap_rank: c.market_cap_rank || old.market_cap_rank,
+            circulating_supply: c.circulating_supply || old.circulating_supply,
+            ath: c.ath || old.ath,
+            ath_change_percentage: c.ath_change_percentage || old.ath_change_percentage,
+            price_change_percentage_7d_in_currency:
+              c.price_change_percentage_7d_in_currency || old.price_change_percentage_7d_in_currency,
+            price_change_percentage_30d_in_currency:
+              c.price_change_percentage_30d_in_currency || old.price_change_percentage_30d_in_currency,
+            total_volume: c.total_volume || old.total_volume,
+          };
+        });
+        const solCoinMerged = merged.find((c) => c.id === "solana") ?? null;
+        return {
+          solana: solCoinMerged,
+          topCoins: merged,
+          solanaHistory: solanaHistory.length ? solanaHistory : prev.solanaHistory,
+          solanaTvl: solanaTvl.length ? solanaTvl : prev.solanaTvl,
+          solanaDetail: solanaDetail ?? prev.solanaDetail,
+          loading: false,
+          error: null,
+          lastUpdated: new Date(),
+          live: prev.live,
+        };
       });
 
       // Step 2: Enrich with CoinGecko supplementary data (market cap, ATH, supply, rank, 7d/30d change)
@@ -365,6 +440,102 @@ export function useCryptoData() {
     const interval = setInterval(fetchAll, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchAll]);
+
+  // Live Binance ticker stream — patches prices into the table/hero without a full refetch
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let closed = false;
+    let retryMs = 1000;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let generation = 0;
+
+    const streams = COIN_CONFIG.map((c) => `${c.binance.toLowerCase()}@ticker`).join("/");
+
+    const applyTicker = (symbol: string, price: number, change24h: number, volume: number) => {
+      const id = COIN_CONFIG.find((c) => c.binance === symbol)?.id;
+      if (!id || !Number.isFinite(price)) return;
+
+      setState((prev) => {
+        if (prev.topCoins.length === 0) return prev;
+        const topCoins = prev.topCoins.map((coin) =>
+          coin.id === id
+            ? {
+                ...coin,
+                current_price: price,
+                price_change_percentage_24h: change24h,
+                total_volume: volume > 0 ? volume : coin.total_volume,
+              }
+            : coin
+        );
+        const solana =
+          id === "solana" ? (topCoins.find((c) => c.id === "solana") ?? prev.solana) : prev.solana;
+        return { ...prev, topCoins, solana };
+      });
+    };
+
+    const connect = () => {
+      if (closed) return;
+      const myGen = ++generation;
+      try {
+        ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+      } catch {
+        retryTimer = setTimeout(connect, retryMs);
+        retryMs = Math.min(retryMs * 2, 30_000);
+        return;
+      }
+
+      ws.onopen = () => {
+        if (myGen !== generation) return;
+        retryMs = 1000;
+        setState((prev) => ({ ...prev, live: true }));
+      };
+
+      ws.onmessage = (event) => {
+        if (myGen !== generation) return;
+        try {
+          const parsed = JSON.parse(event.data as string);
+          const d = parsed?.data;
+          if (!d?.s) return;
+          applyTicker(d.s, parseFloat(d.c), parseFloat(d.P), parseFloat(d.q));
+        } catch {
+          /* ignore malformed frames */
+        }
+      };
+
+      ws.onclose = () => {
+        if (myGen !== generation) return;
+        setState((prev) => ({ ...prev, live: false }));
+        if (!closed) {
+          retryTimer = setTimeout(connect, retryMs);
+          retryMs = Math.min(retryMs * 2, 30_000);
+        }
+      };
+
+      ws.onerror = () => {
+        if (myGen !== generation) return;
+        ws?.close();
+      };
+    };
+
+    connect();
+
+    const onVisibility = () => {
+      if (
+        document.visibilityState === "visible" &&
+        (!ws || (ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING))
+      ) {
+        connect();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      closed = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (retryTimer) clearTimeout(retryTimer);
+      ws?.close();
+    };
+  }, []);
 
   return { ...state, refresh: fetchAll };
 }

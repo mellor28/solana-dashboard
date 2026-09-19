@@ -4,10 +4,10 @@
  * Design: Glassmorphic Space Dashboard — gradient background, large mono price
  */
 
-import { TrendingUp, TrendingDown, Activity, DollarSign, BarChart3 } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, BarChart3 } from "lucide-react";
 import { useCountUp } from "@/hooks/useCountUp";
-import { formatCurrency, formatNumber, type CoinData } from "@/hooks/useCryptoData";
-import { useEffect, useState } from "react";
+import { formatCurrency, type CoinData } from "@/hooks/useCryptoData";
+import LiveDot from "@/components/LiveDot";
 
 interface SolanaHeroProps {
   solana: CoinData | null;
@@ -15,6 +15,9 @@ interface SolanaHeroProps {
   priceChange7d?: number;
   priceChange30d?: number;
   jupPrice?: number;
+  jupChange24h?: number;
+  live?: boolean;
+  athChange?: number;
 }
 
 function StatBadge({
@@ -103,27 +106,20 @@ function StatBadge({
   );
 }
 
-export default function SolanaHero({ solana, loading, priceChange7d, priceChange30d, jupPrice = 0 }: SolanaHeroProps) {
+export default function SolanaHero({
+  solana,
+  loading,
+  priceChange7d,
+  jupPrice = 0,
+  jupChange24h = 0,
+  live = false,
+  athChange,
+}: SolanaHeroProps) {
   const animatedPrice = useCountUp(solana?.current_price ?? 0, 1200, 2);
   const animatedJupPrice = useCountUp(jupPrice, 1200, 4);
   const isPositive = (solana?.price_change_percentage_24h ?? 0) >= 0;
-
-  // JUP 24h change from Binance
-  const [jupChange24h, setJupChange24h] = useState<number>(0);
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch("https://api.binance.com/api/v3/ticker/24hr?symbol=JUPUSDT");
-        const d = await res.json();
-        const pct = parseFloat(d.priceChangePercent);
-        if (!isNaN(pct)) setJupChange24h(pct);
-      } catch {}
-    };
-    load();
-    const id = setInterval(load, 5 * 60_000);
-    return () => clearInterval(id);
-  }, []);
   const jupIsPositive = jupChange24h >= 0;
+  const change7d = priceChange7d ?? solana?.price_change_percentage_7d_in_currency ?? 0;
 
   return (
     <div
@@ -162,8 +158,9 @@ export default function SolanaHero({ solana, loading, priceChange7d, priceChange
         style={{
           position: "relative",
           zIndex: 1,
-          padding: "32px 36px",
+          padding: "28px 24px",
         }}
+        className="sm:!p-8"
       >
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           {/* Left: SOL + JUP prices side by side */}
@@ -203,6 +200,9 @@ export default function SolanaHero({ solana, loading, priceChange7d, priceChange
                 >
                   SOL / USD
                 </span>
+                <span style={{ marginLeft: 10, display: "inline-flex", verticalAlign: "middle" }}>
+                  <LiveDot on={live} />
+                </span>
               </div>
             </div>
 
@@ -217,11 +217,10 @@ export default function SolanaHero({ solana, loading, priceChange7d, priceChange
                 }}
               />
             ) : (
-              <div className="flex items-baseline gap-4">
+              <div className="flex items-baseline gap-4 flex-wrap">
                 <div
-                  className="mono-number"
+                  className="mono-number hero-price"
                   style={{
-                    fontSize: 56,
                     fontWeight: 700,
                     color: "white",
                     lineHeight: 1,
@@ -302,12 +301,12 @@ export default function SolanaHero({ solana, loading, priceChange7d, priceChange
               </div>
             </div>
 
-            {jupPrice === 0 ? (
+            {(loading && jupPrice === 0) ? (
               <div style={{ width: 160, height: 64, background: "rgba(255,255,255,0.08)", borderRadius: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
             ) : (
-              <div className="flex items-baseline gap-4">
-                <div className="mono-number" style={{
-                  fontSize: 56, fontWeight: 700, color: "white", lineHeight: 1,
+              <div className="flex items-baseline gap-4 flex-wrap">
+                <div className="mono-number hero-price" style={{
+                  fontWeight: 700, color: "white", lineHeight: 1,
                   textShadow: "0 0 30px rgba(153,69,255,0.3)",
                   fontFamily: "'Space Mono', monospace",
                 }}>
@@ -344,14 +343,15 @@ export default function SolanaHero({ solana, loading, priceChange7d, priceChange
             />
             <StatBadge
               label="7d Change"
-              value={`${(priceChange7d ?? solana?.price_change_percentage_7d_in_currency ?? 0) >= 0 ? "+" : ""}${(priceChange7d ?? solana?.price_change_percentage_7d_in_currency ?? 0).toFixed(2)}%`}
+              value={`${change7d >= 0 ? "+" : ""}${change7d.toFixed(2)}%`}
               icon={TrendingUp}
-              positive={(priceChange7d ?? solana?.price_change_percentage_7d_in_currency ?? 0) >= 0}
+              positive={change7d >= 0}
             />
             <StatBadge
-              label="Circulating"
-              value={`${formatNumber(solana?.circulating_supply ?? 0)} SOL`}
-              icon={Activity}
+              label="ATH Distance"
+              value={athChange != null ? `${athChange.toFixed(1)}%` : "—"}
+              icon={TrendingDown}
+              positive={false}
             />
           </div>
         </div>

@@ -1,9 +1,10 @@
 /**
  * PriceChart component
- * 30-day Solana price history area chart with gradient fill.
+ * Solana price history area chart with 7D / 30D / 90D range selector.
  * Design: Glassmorphic Space Dashboard — teal-to-purple gradient area
  */
 
+import { useMemo, useState } from "react";
 import {
   AreaChart,
   Area,
@@ -12,7 +13,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine,
 } from "recharts";
 import { type PriceHistoryPoint } from "@/hooks/useCryptoData";
 
@@ -20,6 +20,8 @@ interface PriceChartProps {
   data: PriceHistoryPoint[];
   loading: boolean;
 }
+
+type Range = 7 | 30 | 90;
 
 function CustomTooltip({ active, payload, label }: any) {
   if (active && payload && payload.length) {
@@ -63,7 +65,14 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 export default function PriceChart({ data, loading }: PriceChartProps) {
-  const chartData = data.map((d) => ({
+  const [range, setRange] = useState<Range>(30);
+
+  const sliced = useMemo(() => {
+    if (data.length === 0) return [];
+    return data.slice(-range);
+  }, [data, range]);
+
+  const chartData = sliced.map((d) => ({
     date: new Date(d.timestamp).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -72,15 +81,23 @@ export default function PriceChart({ data, loading }: PriceChartProps) {
   }));
 
   const prices = chartData.map((d) => d.price);
-  const minPrice = Math.min(...prices) * 0.98;
-  const maxPrice = Math.max(...prices) * 1.02;
+  const minRaw = prices.length ? Math.min(...prices) : 0;
+  const maxRaw = prices.length ? Math.max(...prices) : 0;
+  const minPrice = prices.length ? minRaw * 0.98 : 0;
+  const maxPrice = prices.length ? maxRaw * 1.02 : 1;
+  const first = prices[0] ?? 0;
+  const last = prices[prices.length - 1] ?? 0;
+  const periodChange = first > 0 ? ((last - first) / first) * 100 : 0;
+  const periodPositive = periodChange >= 0;
+
+  const xInterval = range === 7 ? 0 : range === 30 ? 4 : 12;
 
   return (
     <div
       className="glass-card"
       style={{ padding: "24px 20px 16px 20px", display: "flex", flexDirection: "column", height: "100%" }}
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3 gap-3" style={{ flexWrap: "wrap" }}>
         <div>
           <h3
             style={{
@@ -96,27 +113,89 @@ export default function PriceChart({ data, loading }: PriceChartProps) {
           <div
             style={{
               fontSize: 12,
-              color: "rgba(255,255,255,0.4)",
+              color: periodPositive ? "#14F195" : "#FF6B6B",
+              fontFamily: "'Space Mono', monospace",
+              fontWeight: 700,
+            }}
+          >
+            {prices.length === 0
+              ? `${range}-DAY TREND`
+              : `${periodPositive ? "+" : ""}${periodChange.toFixed(2)}% · ${range}D`}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div
+            style={{
+              display: "flex",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 8,
+              padding: 3,
+              gap: 2,
+            }}
+            role="tablist"
+            aria-label="Chart range"
+          >
+            {([7, 30, 90] as Range[]).map((r) => {
+              const selected = range === r;
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setRange(r)}
+                  style={{
+                    background: selected ? "rgba(20,241,149,0.15)" : "transparent",
+                    border: selected ? "1px solid rgba(20,241,149,0.35)" : "1px solid transparent",
+                    color: selected ? "#14F195" : "rgba(255,255,255,0.5)",
+                    borderRadius: 6,
+                    padding: "3px 9px",
+                    fontSize: 11,
+                    fontFamily: "'Space Mono', monospace",
+                    fontWeight: 700,
+                  }}
+                >
+                  {r}D
+                </button>
+              );
+            })}
+          </div>
+          <div
+            style={{
+              background: "rgba(20,241,149,0.1)",
+              border: "1px solid rgba(20,241,149,0.2)",
+              borderRadius: 8,
+              padding: "4px 10px",
+              fontSize: 12,
+              color: "#14F195",
               fontFamily: "'Space Mono', monospace",
             }}
           >
-            30-DAY TREND
+            USD
           </div>
         </div>
+      </div>
+
+      {prices.length > 0 && (
         <div
           style={{
-            background: "rgba(20,241,149,0.1)",
-            border: "1px solid rgba(20,241,149,0.2)",
-            borderRadius: 8,
-            padding: "4px 10px",
-            fontSize: 12,
-            color: "#14F195",
+            display: "flex",
+            gap: 16,
+            marginBottom: 10,
+            fontSize: 11,
             fontFamily: "'Space Mono', monospace",
+            color: "rgba(255,255,255,0.45)",
           }}
         >
-          USD
+          <span>
+            LOW <span style={{ color: "rgba(255,255,255,0.85)" }}>${minRaw.toFixed(2)}</span>
+          </span>
+          <span>
+            HIGH <span style={{ color: "rgba(255,255,255,0.85)" }}>${maxRaw.toFixed(2)}</span>
+          </span>
         </div>
-      </div>
+      )}
 
       <div style={{ flex: 1, minHeight: 220 }}>
       {loading && data.length === 0 ? (
@@ -135,6 +214,21 @@ export default function PriceChart({ data, loading }: PriceChartProps) {
           }}
         >
           Loading chart data...
+        </div>
+      ) : chartData.length === 0 ? (
+        <div
+          style={{
+            height: "100%",
+            minHeight: 220,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "rgba(255,255,255,0.35)",
+            fontSize: 13,
+            fontFamily: "'DM Sans', sans-serif",
+          }}
+        >
+          No price history available
         </div>
       ) : (
         <ResponsiveContainer width="100%" height="100%">
@@ -159,7 +253,7 @@ export default function PriceChart({ data, loading }: PriceChartProps) {
               }}
               axisLine={false}
               tickLine={false}
-              interval={4}
+              interval={xInterval}
             />
             <YAxis
               domain={[minPrice, maxPrice]}

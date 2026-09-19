@@ -10,7 +10,6 @@
  */
 
 import { useCryptoData } from "@/hooks/useCryptoData";
-import { useJupBalance } from "@/hooks/useJupBalance";
 import ParticleBackground from "@/components/ParticleBackground";
 import Navbar from "@/components/Navbar";
 import SolanaHero from "@/components/SolanaHero";
@@ -23,6 +22,7 @@ import SolanaDeFiEcosystem from "@/components/SolanaDeFiEcosystem";
 import StablecoinTracker from "@/components/StablecoinTracker";
 import BridgeFlowMonitor from "@/components/BridgeFlowMonitor";
 import ChainTVLComparison from "@/components/ChainTVLComparison";
+import SolanaStakingOverview from "@/components/SolanaStakingOverview";
 import EpochBanner from "@/components/EpochBanner";
 import { AlertCircle } from "lucide-react";
 
@@ -37,13 +37,20 @@ export default function Home() {
     error,
     lastUpdated,
     refresh,
+    live,
   } = useCryptoData();
 
-  const priceChange7d = solanaDetail?.market_data?.price_change_percentage_7d;
-  const priceChange30d = solanaDetail?.market_data?.price_change_percentage_30d;
-
-  // JUP balance for portfolio card — reads same localStorage key as JupiterWidget
-  const { jupPrice } = useJupBalance();
+  const priceChange7d =
+    solana?.price_change_percentage_7d_in_currency ??
+    solanaDetail?.market_data?.price_change_percentage_7d;
+  const priceChange30d =
+    solana?.price_change_percentage_30d_in_currency ??
+    solanaDetail?.market_data?.price_change_percentage_30d;
+  const jupCoin = topCoins.find((c) => c.symbol === "JUP");
+  const jupPrice = jupCoin?.current_price ?? 0;
+  const jupChange24h = jupCoin?.price_change_percentage_24h ?? 0;
+  const athChange =
+    solanaDetail?.market_data?.ath_change_percentage?.usd ?? solana?.ath_change_percentage;
 
   return (
     <div
@@ -86,7 +93,30 @@ export default function Home() {
 
       {/* Main content */}
       <div style={{ position: "relative", zIndex: 1 }}>
-        <Navbar lastUpdated={lastUpdated} onRefresh={refresh} loading={loading} />
+        <a
+          href="#overview"
+          className="skip-link"
+          style={{
+            background: "#14F195",
+            color: "#06091a",
+            padding: "8px 12px",
+            borderRadius: 8,
+            fontFamily: "'DM Sans', sans-serif",
+            fontWeight: 700,
+            fontSize: 13,
+            textDecoration: "none",
+          }}
+        >
+          Skip to content
+        </a>
+        <Navbar
+          lastUpdated={lastUpdated}
+          onRefresh={refresh}
+          loading={loading}
+          solPrice={solana?.current_price}
+          solChange={solana?.price_change_percentage_24h}
+          live={live}
+        />
 
         <main className="container" style={{ paddingTop: 28, paddingBottom: 60 }}>
           {/* Error banner */}
@@ -118,6 +148,9 @@ export default function Home() {
             priceChange7d={priceChange7d}
             priceChange30d={priceChange30d}
             jupPrice={jupPrice}
+            jupChange24h={jupChange24h}
+            live={live}
+            athChange={athChange}
           />
 
           {/* ── EPOCH BANNER ── */}
@@ -276,6 +309,9 @@ export default function Home() {
           {/* ── CHAIN TVL COMPARISON ── */}
           <ChainTVLComparison />
 
+          {/* ── NETWORK STAKING OVERVIEW ── */}
+          <SolanaStakingOverview />
+
           {/* Footer */}
           <div
             style={{
@@ -291,7 +327,7 @@ export default function Home() {
                 fontFamily: "'Space Mono', monospace",
               }}
             >
-              Data from CoinGecko, DeFiLlama, Meteora & Solana RPC · Refreshes every 5 minutes · Not financial advice
+              Data from Binance, CoinGecko, DeFiLlama & Solana RPC · Prices stream live · Not financial advice
             </div>
             <div
               style={{

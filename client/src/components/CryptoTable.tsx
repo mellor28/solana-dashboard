@@ -4,6 +4,7 @@
  * Design: Glassmorphic Space Dashboard
  */
 
+import { useMemo, useState } from "react";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { formatCurrency, type CoinData } from "@/hooks/useCryptoData";
 
@@ -11,6 +12,8 @@ interface CryptoTableProps {
   coins: CoinData[];
   loading: boolean;
 }
+
+type SortKey = "rank" | "price" | "chg24h" | "chg7d" | "chg30d" | "mcap";
 
 function SkeletonRow() {
   return (
@@ -53,7 +56,56 @@ function ChangeCell({ value }: { value: number }) {
   );
 }
 
+function sortValue(coin: CoinData, key: SortKey): number {
+  switch (key) {
+    case "rank":
+      return coin.market_cap_rank || 9999;
+    case "price":
+      return coin.current_price;
+    case "chg24h":
+      return coin.price_change_percentage_24h;
+    case "chg7d":
+      return coin.price_change_percentage_7d_in_currency ?? 0;
+    case "chg30d":
+      return coin.price_change_percentage_30d_in_currency ?? 0;
+    case "mcap":
+      return coin.market_cap;
+  }
+}
+
 export default function CryptoTable({ coins, loading }: CryptoTableProps) {
+  const [sortKey, setSortKey] = useState<SortKey>("rank");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "rank" ? "asc" : "desc");
+    }
+  };
+
+  const sorted = useMemo(() => {
+    const copy = [...coins];
+    copy.sort((a, b) => {
+      const av = sortValue(a, sortKey);
+      const bv = sortValue(b, sortKey);
+      return sortDir === "asc" ? av - bv : bv - av;
+    });
+    return copy;
+  }, [coins, sortKey, sortDir]);
+
+  const headers: { label: string; key: SortKey | null; align: "left" | "right" }[] = [
+    { label: "#", key: "rank", align: "left" },
+    { label: "Asset", key: null, align: "left" },
+    { label: "Price", key: "price", align: "right" },
+    { label: "24h", key: "chg24h", align: "right" },
+    { label: "7d", key: "chg7d", align: "right" },
+    { label: "30d", key: "chg30d", align: "right" },
+    { label: "Market Cap", key: "mcap", align: "right" },
+  ];
+
   return (
     <div id="market-overview" className="glass-card" style={{ overflow: "hidden" }}>
       <div style={{ padding: "20px 20px 12px 20px" }}>
@@ -75,7 +127,7 @@ export default function CryptoTable({ coins, loading }: CryptoTableProps) {
             fontFamily: "'Space Mono', monospace",
           }}
         >
-          TOP CRYPTOCURRENCIES
+          LIVE PRICES · CLICK HEADERS TO SORT
         </div>
       </div>
 
@@ -87,30 +139,45 @@ export default function CryptoTable({ coins, loading }: CryptoTableProps) {
                 borderBottom: "1px solid rgba(255,255,255,0.06)",
               }}
             >
-                {["#", "Asset", "Price", "24h", "7d", "30d", "Market Cap"].map((h) => (
+              {headers.map((h) => {
+                const active = h.key === sortKey;
+                return (
                 <th
-                  key={h}
+                  key={h.label}
+                  onClick={() => h.key && toggleSort(h.key)}
+                  onKeyDown={(e) => {
+                    if (h.key && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                      toggleSort(h.key);
+                    }
+                  }}
+                  role={h.key ? "button" : undefined}
+                  tabIndex={h.key ? 0 : undefined}
                   style={{
                     padding: "8px 16px",
-                    textAlign: h === "#" || h === "Asset" ? "left" : "right",
+                    textAlign: h.align,
                     fontSize: 11,
-                    color: "rgba(255,255,255,0.35)",
+                    color: active ? "#14F195" : "rgba(255,255,255,0.35)",
                     fontFamily: "'Space Mono', monospace",
                     fontWeight: 400,
                     textTransform: "uppercase",
                     letterSpacing: "0.06em",
                     whiteSpace: "nowrap",
+                    cursor: h.key ? "pointer" : "default",
+                    userSelect: "none",
                   }}
                 >
-                  {h}
+                  {h.label}
+                  {active && (sortDir === "asc" ? " ↑" : " ↓")}
                 </th>
-              ))}
+              );
+              })}
             </tr>
           </thead>
           <tbody>
             {loading && coins.length === 0
               ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
-              : coins.map((coin, index) => (
+              : sorted.map((coin) => (
                   <tr
                     key={coin.id}
                     style={{

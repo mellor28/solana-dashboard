@@ -18,15 +18,27 @@ export function useCountUp(
 
   useEffect(() => {
     if (target === 0) return;
-    
+
     const startValue = prevTargetRef.current;
     prevTargetRef.current = target;
     startTimeRef.current = null;
 
+    // First real value: snap immediately so live prices don't count up from $0
+    if (startValue === 0) {
+      const factor = Math.pow(10, decimals);
+      setCurrent(Math.round(target * factor) / factor);
+      return;
+    }
+
+    // Live ticks (websocket) are tiny — tween them quickly so the price stays current
+    const delta = Math.abs(target - startValue);
+    const relative = delta / Math.max(Math.abs(target), 1);
+    const animDuration = relative < 0.02 ? Math.min(220, duration) : duration;
+
     const animate = (timestamp: number) => {
       if (!startTimeRef.current) startTimeRef.current = timestamp;
       const elapsed = timestamp - startTimeRef.current;
-      const progress = Math.min(elapsed / duration, 1);
+      const progress = Math.min(elapsed / animDuration, 1);
       
       // Ease out cubic
       const eased = 1 - Math.pow(1 - progress, 3);

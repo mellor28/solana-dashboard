@@ -17,7 +17,7 @@ import { Shield, Percent, Users, Coins, RefreshCw, Lock, Zap } from "lucide-reac
 import { formatTime } from "@/lib/utils";
 
 const REFRESH_MS = 2 * 60_000;
-const RPC = "https://solana.publicnode.com";
+const RPC = "https://solana-rpc.publicnode.com";
 
 interface StakingData {
   totalStakedSol: number;
@@ -189,7 +189,7 @@ export default function SolanaStakingOverview() {
   const jitoMevSol = data ? data.jitoMevLamports / 1e9 : 0;
 
   return (
-    <section id="staking-overview" style={{ marginBottom: 32 }}>
+    <section id="staking" style={{ marginBottom: 32 }}>
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <div

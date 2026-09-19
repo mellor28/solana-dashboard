@@ -74,12 +74,11 @@ export default function EpochBanner() {
     return () => clearInterval(id);
   }, [load]);
 
-  // Tick every second
+  // Tick every second — interval is independent of countdown so it isn't rebuilt each tick
   useEffect(() => {
-    if (countdown <= 0) return;
     const t = setInterval(() => setCountdown((c) => Math.max(0, c - 1)), 1000);
     return () => clearInterval(t);
-  }, [countdown]);
+  }, []);
 
   const progress = epochInfo ? (epochInfo.slotIndex / epochInfo.slotsInEpoch) * 100 : 0;
   const { d, h, m, s } = formatDuration(countdown);

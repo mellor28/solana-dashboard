@@ -101,11 +101,28 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 84px;
+    color-scheme: dark;
+  }
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 12px;
+    z-index: 200;
+  }
+  .skip-link:focus {
+    left: 16px;
+  }
   body {
     @apply bg-background text-foreground;
     background-color: #06091a;
     color: rgba(255, 255, 255, 0.95);
     font-family: 'DM Sans', sans-serif;
+  }
+  main [id] {
+    scroll-margin-top: 84px;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -149,19 +166,19 @@
     }
   }
 
-  /* Glass card base */
+  /* Glass card base — no translateY on hover (lifts entire dashboard panels) */
   .glass-card {
     background: rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
 
   .glass-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 32px rgba(20, 241, 149, 0.08);
+    border-color: rgba(255, 255, 255, 0.16);
+    box-shadow: 0 8px 32px rgba(20, 241, 149, 0.06);
   }
 
   .glass-card-purple {
@@ -312,5 +329,28 @@
   @keyframes pulse {
     0%, 100% { opacity: 0.4; }
     50% { opacity: 0.8; }
+  }
+
+  .hero-price {
+    font-size: 56px;
+  }
+
+  @media (max-width: 640px) {
+    .hero-price {
+      font-size: 36px !important;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    .animate-fade-in-up,
+    .animate-pulse-glow {
+      animation: none !important;
+    }
+    .glass-card {
+      transition: none;
+    }
   }
 }

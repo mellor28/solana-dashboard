@@ -94,15 +94,16 @@ async function rpcPost(url: string, method: string, params: unknown[] = []) {
   return data.result;
 }
 
-function getCongestionStatus(tps: number): {
+function getCongestionStatus(nonVoteTps: number): {
   label: string;
   color: string;
   icon: React.ReactNode;
   bg: string;
 } {
-  if (tps >= 3000) {
+  // Total TPS is vote-dominated (~3k+ even when idle). Non-vote TPS is the real load signal.
+  if (nonVoteTps >= 2500) {
     return { label: "High Load", color: "#FF6B6B", icon: <XCircle size={14} />, bg: "rgba(255,107,107,0.1)" };
-  } else if (tps >= 1500) {
+  } else if (nonVoteTps >= 800) {
     return { label: "Moderate", color: "#FFB800", icon: <AlertTriangle size={14} />, bg: "rgba(255,184,0,0.1)" };
   } else {
     return { label: "Healthy", color: "#14F195", icon: <CheckCircle size={14} />, bg: "rgba(20,241,149,0.1)" };
@@ -315,7 +316,7 @@ function UptimeBars({
       </div>
 
       {/* Legend */}
-      <div style={{ display: "flex", gap: 14, marginTop: 10, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 14, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontFamily: "'Space Mono', monospace" }}>90 days ago</span>
         <div style={{ flex: 1 }} />
         {Object.entries(IMPACT_LABEL)
@@ -499,7 +500,7 @@ export default function NetworkHealth() {
     return () => { clearInterval(interval); clearInterval(histInterval); clearInterval(uptimeInterval); };
   }, [fetchData, fetchTpsHistory, fetchUptime]);
 
-  const congestion = data ? getCongestionStatus(data.tps) : null;
+  const congestion = data ? getCongestionStatus(data.nonVoteTps) : null;
   const epochProgress = data ? (data.slotIndex / data.slotsInEpoch) * 100 : 0;
 
   const fmtNum = (n: number) =>
@@ -573,7 +574,7 @@ export default function NetworkHealth() {
       </div>
 
       {loading ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }} className="network-grid">
           {[...Array(4)].map((_, i) => (
             <div key={i} style={{ height: 90, background: "rgba(255,255,255,0.04)", borderRadius: 12, animation: "pulse 1.5s ease-in-out infinite" }} />
           ))}
