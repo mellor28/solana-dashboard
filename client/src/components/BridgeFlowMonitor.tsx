@@ -16,9 +16,10 @@ import {
   Cell,
 } from "recharts";
 import { ArrowDownLeft, ArrowUpRight, RefreshCw, Activity } from "lucide-react";
+import { WORMHOLE_SOLANA_CHAIN_ID, wormholeChainName } from "@/lib/wormholeChains";
 
 const REFRESH_MS = 15 * 60_000;
-const CACHE_KEY = "solana_wormhole_flow_cache";
+const CACHE_KEY = "solana_wormhole_flow_cache_v2";
 
 interface ChainFlow {
   name: string;
@@ -35,27 +36,6 @@ interface BridgeData {
   fetchedAt: string;
 }
 
-const CHAIN_NAMES: Record<number, string> = {
-  1: "Solana",
-  2: "Ethereum",
-  4: "BSC",
-  5: "Polygon",
-  6: "Avalanche",
-  10: "Fantom",
-  16: "Moonbeam",
-  21: "Sui",
-  22: "Aptos",
-  23: "Arbitrum",
-  24: "Optimism",
-  30: "Base",
-  32: "Sei",
-  34: "Scroll",
-  36: "Blast",
-  40: "Mantle",
-  48: "Linea",
-  50: "Berachain",
-};
-
 function fmt(n: number, decimals = 0): string {
   const abs = Math.abs(n);
   if (abs >= 1e9) return `$${(n / 1e9).toFixed(decimals + 1)}B`;
@@ -70,20 +50,24 @@ async function loadWormholeData(): Promise<BridgeData> {
   const data = await res.json();
   const txs: any[] = data.txs ?? [];
 
-  // Outflows from Solana (Chain ID 1)
-  const solOut = txs.find((t: any) => t.chain === 1);
+  const SOL = WORMHOLE_SOLANA_CHAIN_ID;
+
+  // Outflows from Solana (Wormhole chain ID 1 — Near is 15)
+  const solOut = txs.find((t: any) => Number(t.chain) === SOL);
   const outflowsByChain: Record<number, number> = {};
   solOut?.destinations.forEach((d: any) => {
-    if (d.chain !== 1) outflowsByChain[d.chain] = parseFloat(d.volume || 0);
+    const dest = Number(d.chain);
+    if (dest !== SOL) outflowsByChain[dest] = parseFloat(d.volume || 0);
   });
 
-  // Inflows to Solana (Chain ID 1)
+  // Inflows to Solana
   const inflowsByChain: Record<number, number> = {};
   txs.forEach((t: any) => {
-    if (t.chain === 1) return;
+    const src = Number(t.chain);
+    if (src === SOL) return;
     t.destinations.forEach((d: any) => {
-      if (d.chain === 1) {
-        inflowsByChain[t.chain] = (inflowsByChain[t.chain] ?? 0) + parseFloat(d.volume || 0);
+      if (Number(d.chain) === SOL) {
+        inflowsByChain[src] = (inflowsByChain[src] ?? 0) + parseFloat(d.volume || 0);
       }
     });
   });
@@ -96,12 +80,13 @@ async function loadWormholeData(): Promise<BridgeData> {
       const inflow = inflowsByChain[cid] ?? 0;
       const outflow = outflowsByChain[cid] ?? 0;
       return {
-        name: CHAIN_NAMES[cid] ?? `Chain ${cid}`,
+        name: wormholeChainName(cid),
         inflow,
         outflow,
         net: inflow - outflow
       };
     })
+    .filter((row) => row.inflow > 0 || row.outflow > 0)
     .sort((a, b) => (b.inflow + b.outflow) - (a.inflow + a.outflow))
     .slice(0, 6);
 
@@ -325,7 +310,7 @@ export default function BridgeFlowMonitor() {
             {/* Right side: Chart */}
             <div style={{ height: 300 }}>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace", marginBottom: 12, textAlign: "right" }}>
-                VOLUME BY SOURCE CHAIN
+                VOLUME BY COUNTERPARTY CHAIN
               </div>
               <ResponsiveContainer width="100%" height="90%">
                 <BarChart data={data?.chart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={2}>

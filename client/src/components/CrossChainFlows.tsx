@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { ArrowDownLeft, ArrowUpRight, RefreshCw, GitBranch } from "lucide-react";
 import { formatTime } from "@/lib/utils";
+import { wormholeChainName } from "@/lib/wormholeChains";
 
 // Wormhole chain ID → display name + colour
 const CHAIN_META: Record<number, { name: string; color: string; logo: string }> = {
@@ -42,7 +43,7 @@ const CHAIN_META: Record<number, { name: string; color: string; logo: string }> 
 };
 
 function chainName(id: number) {
-  return CHAIN_META[id]?.name ?? `Chain #${id}`;
+  return CHAIN_META[id]?.name ?? wormholeChainName(id);
 }
 function chainColor(id: number) {
   return CHAIN_META[id]?.color ?? "#888";
