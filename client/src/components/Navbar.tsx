@@ -26,7 +26,6 @@ const NAV_ITEMS = [
   { label: "Stables", href: "#stablecoins" },
   { label: "Bridges", href: "#bridge-flows" },
   { label: "Chains", href: "#chain-comparison" },
-  { label: "Staking", href: "#staking" },
 ];
 
 export default function Navbar({

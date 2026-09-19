@@ -1,7 +1,7 @@
 /**
  * Home page — Solana Dashboard
  * Assembles all dashboard sections: Navbar, Hero, Price Chart, Crypto Table,
- * Adoption Metrics, and Staking Tracker.
+ * Adoption Metrics, and network panels.
  * Design: Glassmorphic Space Dashboard
  * - Deep space background (#06091a)
  * - Glass cards with backdrop blur
@@ -22,7 +22,6 @@ import SolanaDeFiEcosystem from "@/components/SolanaDeFiEcosystem";
 import StablecoinTracker from "@/components/StablecoinTracker";
 import BridgeFlowMonitor from "@/components/BridgeFlowMonitor";
 import ChainTVLComparison from "@/components/ChainTVLComparison";
-import SolanaStakingOverview from "@/components/SolanaStakingOverview";
 import EpochBanner from "@/components/EpochBanner";
 import { AlertCircle } from "lucide-react";
 
@@ -309,9 +308,6 @@ export default function Home() {
           {/* ── CHAIN TVL COMPARISON ── */}
           <ChainTVLComparison />
 
-          {/* ── NETWORK STAKING OVERVIEW ── */}
-          <SolanaStakingOverview />
-
           {/* Footer */}
           <div
             style={{
@@ -328,16 +324,6 @@ export default function Home() {
               }}
             >
               Data from Binance, CoinGecko, DeFiLlama & Solana RPC · Prices stream live · Not financial advice
-            </div>
-            <div
-              style={{
-                fontSize: 11,
-                color: "rgba(255,255,255,0.15)",
-                fontFamily: "'DM Sans', sans-serif",
-                marginTop: 4,
-              }}
-            >
-              Staking projections are estimates based on compound interest. APY varies with network conditions.
             </div>
           </div>
         </main>
