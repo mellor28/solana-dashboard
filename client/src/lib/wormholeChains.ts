@@ -69,6 +69,7 @@ const WORMHOLE_CHAIN_NAMES: Record<number, string> = {
 };
 
 export const WORMHOLE_SOLANA_CHAIN_ID = 1;
+export const WORMHOLE_AVALANCHE_CHAIN_ID = 6;
 
 export function wormholeChainName(id: number): string {
   return WORMHOLE_CHAIN_NAMES[id] ?? `Chain ${id}`;

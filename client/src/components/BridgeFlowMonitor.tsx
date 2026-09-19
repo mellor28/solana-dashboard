@@ -1,8 +1,11 @@
 /**
- * BridgeFlowMonitor — Capital flows into/out of Solana via Wormhole
+ * BridgeFlowMonitor — Solana capital flows via Wormhole
  * Design: Glassmorphic Space Dashboard
- * 
- * Source: api.wormholescan.io (Free, CORS-open)
+ *
+ * Inflow  = other chain → Solana (arriving on Solana)
+ * Outflow = Solana → other chain (leaving Solana)
+ *
+ * Source: api.wormholescan.io (free, CORS-open). Default window is 7d.
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -13,15 +16,22 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  Cell,
+  CartesianGrid,
 } from "recharts";
 import { ArrowDownLeft, ArrowUpRight, RefreshCw, Activity } from "lucide-react";
-import { WORMHOLE_SOLANA_CHAIN_ID, wormholeChainName } from "@/lib/wormholeChains";
+import {
+  WORMHOLE_AVALANCHE_CHAIN_ID,
+  WORMHOLE_SOLANA_CHAIN_ID,
+  wormholeChainName,
+} from "@/lib/wormholeChains";
 
 const REFRESH_MS = 15 * 60_000;
-const CACHE_KEY = "solana_wormhole_flow_cache_v2";
+const CACHE_KEY = "solana_wormhole_flow_cache_v3";
+const SOL = WORMHOLE_SOLANA_CHAIN_ID;
+const AVAX = WORMHOLE_AVALANCHE_CHAIN_ID;
 
 interface ChainFlow {
+  chainId: number;
   name: string;
   inflow: number;
   outflow: number;
@@ -33,34 +43,48 @@ interface BridgeData {
   todayIn: number;
   todayOut: number;
   chart: ChainFlow[];
+  inflows: ChainFlow[];
+  outflows: ChainFlow[];
+  avax: ChainFlow;
   fetchedAt: string;
 }
 
-function fmt(n: number, decimals = 0): string {
+function fmt(n: number): string {
   const abs = Math.abs(n);
-  if (abs >= 1e9) return `$${(n / 1e9).toFixed(decimals + 1)}B`;
-  if (abs >= 1e6) return `$${(n / 1e6).toFixed(decimals)}M`;
-  if (abs >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
-  return `$${n.toFixed(0)}`;
+  const sign = n < 0 ? "-" : "";
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
+  return `${sign}$${abs.toFixed(0)}`;
+}
+
+function emptyFlow(chainId: number): ChainFlow {
+  return { chainId, name: wormholeChainName(chainId), inflow: 0, outflow: 0, net: 0 };
+}
+
+function withAvax(rows: ChainFlow[], key: "inflow" | "outflow"): ChainFlow[] {
+  const top = rows.filter((r) => r[key] > 0).slice(0, 6);
+  const avax = rows.find((r) => r.chainId === AVAX);
+  if (avax && !top.some((r) => r.chainId === AVAX)) {
+    return [...top, avax];
+  }
+  return top;
 }
 
 async function loadWormholeData(): Promise<BridgeData> {
-  const res = await fetch("https://api.wormholescan.io/api/v1/x-chain-activity");
+  const res = await fetch("https://api.wormholescan.io/api/v1/x-chain-activity?timeSpan=7d");
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   const txs: any[] = data.txs ?? [];
 
-  const SOL = WORMHOLE_SOLANA_CHAIN_ID;
-
-  // Outflows from Solana (Wormhole chain ID 1 — Near is 15)
-  const solOut = txs.find((t: any) => Number(t.chain) === SOL);
   const outflowsByChain: Record<number, number> = {};
+  const solOut = txs.find((t: any) => Number(t.chain) === SOL);
   solOut?.destinations.forEach((d: any) => {
     const dest = Number(d.chain);
-    if (dest !== SOL) outflowsByChain[dest] = parseFloat(d.volume || 0);
+    if (dest === SOL) return; // ignore Solana → Solana
+    outflowsByChain[dest] = parseFloat(d.volume || 0);
   });
 
-  // Inflows to Solana
   const inflowsByChain: Record<number, number> = {};
   txs.forEach((t: any) => {
     const src = Number(t.chain);
@@ -72,32 +96,53 @@ async function loadWormholeData(): Promise<BridgeData> {
     });
   });
 
-  // Aggregate by chain for the chart
-  const allChainIds = new Set([...Object.keys(inflowsByChain), ...Object.keys(outflowsByChain)]);
-  const chart: ChainFlow[] = Array.from(allChainIds)
-    .map(id => {
-      const cid = parseInt(id as string);
-      const inflow = inflowsByChain[cid] ?? 0;
-      const outflow = outflowsByChain[cid] ?? 0;
-      return {
-        name: wormholeChainName(cid),
-        inflow,
-        outflow,
-        net: inflow - outflow
-      };
-    })
-    .filter((row) => row.inflow > 0 || row.outflow > 0)
-    .sort((a, b) => (b.inflow + b.outflow) - (a.inflow + a.outflow))
-    .slice(0, 6);
+  const allChainIds = new Set([
+    ...Object.keys(inflowsByChain).map(Number),
+    ...Object.keys(outflowsByChain).map(Number),
+    AVAX,
+  ]);
 
-  const totalIn = Object.values(inflowsByChain).reduce((a, b) => a + b, 0);
-  const totalOut = Object.values(outflowsByChain).reduce((a, b) => a + b, 0);
+  const counterparts: ChainFlow[] = Array.from(allChainIds).map((cid) => {
+    const inflow = inflowsByChain[cid] ?? 0;
+    const outflow = outflowsByChain[cid] ?? 0;
+    return {
+      chainId: cid,
+      name: wormholeChainName(cid),
+      inflow,
+      outflow,
+      net: inflow - outflow,
+    };
+  });
 
-  const result = {
+  const totalIn = counterparts.reduce((s, r) => s + r.inflow, 0);
+  const totalOut = counterparts.reduce((s, r) => s + r.outflow, 0);
+  const avax = counterparts.find((r) => r.chainId === AVAX) ?? emptyFlow(AVAX);
+
+  const solanaRow: ChainFlow = {
+    chainId: SOL,
+    name: "Solana",
+    inflow: totalIn,
+    outflow: totalOut,
+    net: totalIn - totalOut,
+  };
+
+  const others = counterparts
+    .filter((r) => r.chainId !== SOL)
+    .sort((a, b) => b.inflow + b.outflow - (a.inflow + a.outflow));
+
+  const chartOthers = others.filter((r) => r.inflow > 0 || r.outflow > 0).slice(0, 7);
+  if (!chartOthers.some((r) => r.chainId === AVAX)) {
+    chartOthers.push(avax);
+  }
+
+  const result: BridgeData = {
     todayNet: totalIn - totalOut,
     todayIn: totalIn,
     todayOut: totalOut,
-    chart,
+    chart: [solanaRow, ...chartOthers],
+    inflows: withAvax([...others].sort((a, b) => b.inflow - a.inflow), "inflow"),
+    outflows: withAvax([...others].sort((a, b) => b.outflow - a.outflow), "outflow"),
+    avax,
     fetchedAt: new Date().toISOString(),
   };
 
@@ -109,7 +154,7 @@ function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   const inflow = payload.find((p: any) => p.dataKey === "inflow")?.value ?? 0;
   const outflow = payload.find((p: any) => p.dataKey === "outflow")?.value ?? 0;
-  const net = inflow - outflow;
+  const isSolana = label === "Solana";
   return (
     <div style={{
       background: "rgba(6,9,26,0.95)",
@@ -120,25 +165,107 @@ function ChartTooltip({ active, payload, label }: any) {
       fontSize: 11,
     }}>
       <div style={{ color: "rgba(255,255,255,0.8)", marginBottom: 5, fontWeight: 700 }}>{label}</div>
-      <div style={{ color: "#14F195", marginBottom: 2 }}>In: {fmt(inflow)}</div>
-      <div style={{ color: "#FF6B6B", marginBottom: 2 }}>Out: {fmt(outflow)}</div>
-      <div style={{
-        color: net >= 0 ? "#14F195" : "#FF6B6B",
-        borderTop: "1px solid rgba(255,255,255,0.1)",
-        paddingTop: 4,
-        marginTop: 4,
-        fontWeight: 700,
-      }}>
-        Net: {net >= 0 ? "+" : ""}{fmt(net)}
+      <div style={{ color: "#14F195", marginBottom: 2 }}>
+        {isSolana ? "Arriving on Solana" : `Into Solana from ${label}`}: {fmt(inflow)}
       </div>
+      <div style={{ color: "#FF6B6B", marginBottom: 2 }}>
+        {isSolana ? "Leaving Solana" : `Out of Solana to ${label}`}: {fmt(outflow)}
+      </div>
+    </div>
+  );
+}
+
+function FlowList({
+  title,
+  rows,
+  direction,
+}: {
+  title: string;
+  rows: ChainFlow[];
+  direction: "in" | "out";
+}) {
+  const color = direction === "in" ? "#14F195" : "#FF6B6B";
+  return (
+    <div>
+      <div style={{
+        fontSize: 11,
+        color: "rgba(255,255,255,0.4)",
+        fontFamily: "'Space Mono', monospace",
+        marginBottom: 10,
+        letterSpacing: "0.04em",
+      }}>
+        {title}
+      </div>
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>No flows in this window.</div>
+      ) : (
+        rows.map((row) => {
+          const amount = direction === "in" ? row.inflow : row.outflow;
+          const isAvax = row.chainId === AVAX;
+          return (
+            <div
+              key={`${direction}-${row.chainId}`}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 10,
+                padding: "8px 0",
+                borderBottom: "1px solid rgba(255,255,255,0.05)",
+                background: isAvax ? "rgba(232,65,66,0.08)" : "transparent",
+                margin: isAvax ? "0 -8px" : 0,
+                paddingLeft: isAvax ? 8 : 0,
+                paddingRight: isAvax ? 8 : 0,
+                borderRadius: isAvax ? 8 : 0,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <span style={{
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.85)",
+                  fontFamily: "'DM Sans', sans-serif",
+                  whiteSpace: "nowrap",
+                }}>
+                  {direction === "in" ? `${row.name} → Solana` : `Solana → ${row.name}`}
+                </span>
+                {isAvax && (
+                  <span style={{
+                    fontSize: 9,
+                    fontFamily: "'Space Mono', monospace",
+                    color: "#E84142",
+                    border: "1px solid rgba(232,65,66,0.4)",
+                    borderRadius: 4,
+                    padding: "1px 5px",
+                  }}>
+                    AVAX
+                  </span>
+                )}
+              </div>
+              <span style={{
+                fontSize: 13,
+                fontFamily: "'Space Mono', monospace",
+                fontWeight: 700,
+                color,
+                flexShrink: 0,
+              }}>
+                {fmt(amount)}
+              </span>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }
 
 export default function BridgeFlowMonitor() {
   const [data, setData] = useState<BridgeData | null>(() => {
-    const cached = localStorage.getItem(CACHE_KEY);
-    try { return cached ? JSON.parse(cached) : null; } catch { return null; }
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
   });
   const [loading, setLoading] = useState(!localStorage.getItem(CACHE_KEY));
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +277,7 @@ export default function BridgeFlowMonitor() {
       const d = await loadWormholeData();
       setData(d);
       setError(null);
-    } catch (e: any) {
+    } catch {
       if (localStorage.getItem(CACHE_KEY)) {
         setError("Wormhole API throttled (using cached data).");
       } else {
@@ -169,10 +296,10 @@ export default function BridgeFlowMonitor() {
   }, [load]);
 
   const isNetPositive = (data?.todayNet ?? 0) >= 0;
+  const avaxNet = data?.avax.net ?? 0;
 
   return (
     <section id="bridge-flows" style={{ marginBottom: 32 }}>
-      {/* Section header */}
       <div className="flex items-center gap-3 mb-5">
         <div style={{
           width: 4, height: 28,
@@ -189,23 +316,17 @@ export default function BridgeFlowMonitor() {
             Wormhole Bridge Activity
           </h2>
           <div style={{
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: "0.05em",
+            color: "#14F195",
             display: "flex",
             alignItems: "center",
-            gap: 12,
+            gap: 4,
             marginTop: 4,
           }}>
-            <span style={{
-              fontSize: 10,
-              fontWeight: 800,
-              letterSpacing: "0.05em",
-              color: "#14F195",
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#14F195", boxShadow: "0 0 8px #14F195" }} />
-              LIVE · WORMHOLE SCAN · FLOWS · REFRESHES 15m
-            </span>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#14F195", boxShadow: "0 0 8px #14F195" }} />
+            SOLANA · 7D · WORMHOLE SCAN
           </div>
         </div>
 
@@ -231,24 +352,16 @@ export default function BridgeFlowMonitor() {
         </button>
       </div>
 
-      <div
-        className="glass-card"
-        style={{
-          padding: 24,
-          minHeight: 340,
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
+      <div className="glass-card" style={{ padding: 24, position: "relative", overflow: "hidden" }}>
         {loading && !data ? (
-          <div className="flex flex-col items-center justify-center h-full" style={{ minHeight: 280 }}>
-            <Activity className="animate-pulse text-solana-green mb-4" size={40} />
+          <div className="flex flex-col items-center justify-center" style={{ minHeight: 280 }}>
+            <Activity className="animate-pulse mb-4" size={40} color="#14F195" />
             <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, fontFamily: "'Space Mono', monospace" }}>
               COLLECTING BRIDGE DATA...
             </div>
           </div>
         ) : error && !data ? (
-          <div className="flex flex-col items-center justify-center h-full" style={{ minHeight: 280 }}>
+          <div className="flex flex-col items-center justify-center" style={{ minHeight: 280 }}>
             <div style={{ color: "#FF6B6B", fontSize: 14, fontFamily: "'DM Sans', sans-serif", marginBottom: 8 }}>
               {error}
             </div>
@@ -260,92 +373,139 @@ export default function BridgeFlowMonitor() {
             </button>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: 32 }} className="flex-col-on-mobile">
-            {/* Left side: Stats */}
-            <div>
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace", marginBottom: 8 }}>
-                  SOLANA NET FLOW (24H)
+          <>
+            <div style={{
+              fontSize: 12,
+              color: "rgba(255,255,255,0.45)",
+              fontFamily: "'DM Sans', sans-serif",
+              marginBottom: 18,
+              lineHeight: 1.45,
+            }}>
+              Green = arriving <strong style={{ color: "#14F195" }}>on Solana</strong>.
+              Red = leaving Solana <strong style={{ color: "#FF6B6B" }}>to another chain</strong>.
+              A red Near bar means Solana → Near, not Near → Solana.
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                gap: 12,
+                marginBottom: 22,
+              }}
+              className="flex-col-on-mobile"
+            >
+              <div className="glass-card" style={{ padding: "14px 16px" }}>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace", marginBottom: 6 }}>
+                  SOLANA NET (7D)
                 </div>
                 <div style={{
-                  fontSize: 36,
+                  fontSize: 22,
                   fontWeight: 800,
                   fontFamily: "'Space Mono', monospace",
                   color: isNetPositive ? "#14F195" : "#FF6B6B",
-                  letterSpacing: "-0.02em",
                 }}>
-                  {isNetPositive ? "+" : ""}{fmt(data?.todayNet ?? 0, 1)}
+                  {isNetPositive ? "+" : ""}{fmt(data?.todayNet ?? 0)}
                 </div>
               </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div className="glass-card" style={{ padding: "12px 16px", background: "rgba(20,241,149,0.03)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Inflows</span>
-                    <ArrowDownLeft size={16} color="#14F195" />
-                  </div>
-                  <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Space Mono', monospace", color: "white" }}>
-                    {fmt(data?.todayIn ?? 0, 1)}
-                  </div>
+              <div className="glass-card" style={{ padding: "14px 16px", background: "rgba(20,241,149,0.04)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace" }}>INTO SOLANA</span>
+                  <ArrowDownLeft size={14} color="#14F195" />
                 </div>
-
-                <div className="glass-card" style={{ padding: "12px 16px", background: "rgba(255,107,107,0.03)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Outflows</span>
-                    <ArrowUpRight size={16} color="#FF6B6B" />
-                  </div>
-                  <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Space Mono', monospace", color: "white" }}>
-                    {fmt(data?.todayOut ?? 0, 1)}
-                  </div>
+                <div style={{ fontSize: 22, fontWeight: 800, fontFamily: "'Space Mono', monospace", color: "white" }}>
+                  {fmt(data?.todayIn ?? 0)}
                 </div>
-
-                {error && (
-                  <div style={{ fontSize: 10, color: "rgba(255,184,0,0.6)", marginTop: 8, fontStyle: "italic" }}>
-                    * {error}
-                  </div>
-                )}
+              </div>
+              <div className="glass-card" style={{ padding: "14px 16px", background: "rgba(255,107,107,0.04)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace" }}>OUT OF SOLANA</span>
+                  <ArrowUpRight size={14} color="#FF6B6B" />
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 800, fontFamily: "'Space Mono', monospace", color: "white" }}>
+                  {fmt(data?.todayOut ?? 0)}
+                </div>
+              </div>
+              <div className="glass-card" style={{ padding: "14px 16px", background: "rgba(232,65,66,0.06)", border: "1px solid rgba(232,65,66,0.25)" }}>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace", marginBottom: 6 }}>
+                  AVAX ↔ SOL
+                </div>
+                <div style={{
+                  fontSize: 22,
+                  fontWeight: 800,
+                  fontFamily: "'Space Mono', monospace",
+                  color: avaxNet >= 0 ? "#14F195" : "#FF6B6B",
+                }}>
+                  {avaxNet >= 0 ? "+" : ""}{fmt(avaxNet)}
+                </div>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace", marginTop: 4 }}>
+                  In {fmt(data?.avax.inflow ?? 0)} · Out {fmt(data?.avax.outflow ?? 0)}
+                </div>
               </div>
             </div>
 
-            {/* Right side: Chart */}
-            <div style={{ height: 300 }}>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace", marginBottom: 12, textAlign: "right" }}>
-                VOLUME BY COUNTERPARTY CHAIN
+            <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Mono', monospace" }}>
+                SOLANA FIRST · THEN LARGEST COUNTERPARTIES
               </div>
-              <ResponsiveContainer width="100%" height="90%">
-                <BarChart data={data?.chart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={2}>
-                  <XAxis
-                    dataKey="name"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 10 }}
-                  />
-                  <YAxis hide domain={[0, "auto"]} />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
-                  <Bar dataKey="inflow" radius={[4, 4, 0, 0]} barSize={20}>
-                    {data?.chart.map((entry, index) => (
-                      <Cell key={`cell-in-${index}`} fill="#14F195" fillOpacity={0.8} />
-                    ))}
-                  </Bar>
-                  <Bar dataKey="outflow" radius={[4, 4, 0, 0]} barSize={20}>
-                    {data?.chart.map((entry, index) => (
-                      <Cell key={`cell-out-${index}`} fill="#FF6B6B" fillOpacity={0.8} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-              <div style={{ display: "flex", gap: 16, justifyContent: "flex-end", marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <div style={{ width: 8, height: 8, borderRadius: 2, background: "#14F195" }} />
-                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Inflow</span>
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Into Solana</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <div style={{ width: 8, height: 8, borderRadius: 2, background: "#FF6B6B" }} />
-                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Outflow</span>
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Out of Solana</span>
                 </div>
               </div>
             </div>
-          </div>
+
+            <div style={{ height: 320, marginBottom: 24 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={data?.chart}
+                  layout="vertical"
+                  margin={{ top: 4, right: 12, left: 4, bottom: 4 }}
+                  barGap={2}
+                  barCategoryGap="18%"
+                >
+                  <CartesianGrid stroke="rgba(255,255,255,0.04)" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    tickFormatter={(v) => fmt(Number(v))}
+                    tick={{ fill: "rgba(255,255,255,0.35)", fontSize: 10, fontFamily: "'Space Mono', monospace" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={88}
+                    tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 11, fontFamily: "'DM Sans', sans-serif" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                  <Bar dataKey="inflow" name="Into Solana" fill="#14F195" fillOpacity={0.85} radius={[0, 4, 4, 0]} barSize={10} />
+                  <Bar dataKey="outflow" name="Out of Solana" fill="#FF6B6B" fillOpacity={0.85} radius={[0, 4, 4, 0]} barSize={10} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div
+              style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }}
+              className="flex-col-on-mobile"
+            >
+              <FlowList title="BIGGEST INFLOWS · INTO SOLANA" rows={data?.inflows ?? []} direction="in" />
+              <FlowList title="BIGGEST OUTFLOWS · OUT OF SOLANA" rows={data?.outflows ?? []} direction="out" />
+            </div>
+
+            {error && (
+              <div style={{ fontSize: 10, color: "rgba(255,184,0,0.6)", marginTop: 12, fontStyle: "italic" }}>
+                * {error}
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>
